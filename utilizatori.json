@@ -1,0 +1,16 @@
+[
+    {
+      "utilizator": "test",
+      "parola": "test",
+      "nume": "test",
+      "prenume": "test",
+      "admin": false
+    },
+    {
+      "utilizator": "Efta",
+      "parola": "admin",
+      "nume": "Efta",
+      "prenume": "Beats",
+      "admin": true
+    }
+  ]

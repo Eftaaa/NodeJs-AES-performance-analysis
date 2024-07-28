@@ -1,0 +1,96 @@
+<head>
+    <% var pageTitle = 'Upload File' %>
+    <meta charset="utf-8">
+    <title><%= pageTitle %></title>
+    <link rel="stylesheet" type="text/css" href="../stil.css">
+    <style>
+      /* General CSS */
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #f8f9fa;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+      }
+  
+      .container {
+        text-align: center;
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+  
+      .upload-button {
+        display: inline-block;
+        padding: 10px 20px;
+        font-size: 16px;
+        color: #fff;
+        background-color: #007bff;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+      }
+  
+      .upload-button:hover {
+        background-color: #0056b3;
+      }
+  
+      .file-name {
+        margin-top: 15px;
+        font-size: 16px;
+        color: #333;
+      }
+  
+      .progress-bar-container {
+        margin-top: 15px;
+        width: 100%;
+        background-color: #e9ecef;
+        border-radius: 5px;
+        overflow: hidden;
+      }
+  
+      .progress-bar {
+        height: 20px;
+        background-color: #007bff;
+        width: 0;
+        transition: width 0.3s ease;
+      }
+    </style>
+  </head>
+  <body>
+
+  
+    <div class="container">
+      <input type="file" id="file-upload" style="display: none;" />
+      <label for="file-upload" class="upload-button">Choose File</label>
+      <div class="file-name" id="file-name">No file chosen</div>
+      <div class="progress-bar-container">
+        <div class="progress-bar" id="progress-bar"></div>
+      </div>
+    </div>
+  
+    <script>
+      document.getElementById('file-upload').addEventListener('change', function(event) {
+        const fileName = event.target.files[0] ? event.target.files[0].name : 'No file chosen';
+        document.getElementById('file-name').textContent = fileName;
+  
+        // Simulate upload progress
+        const progressBar = document.getElementById('progress-bar');
+        progressBar.style.width = '0%';
+  
+        const uploadSimulation = setInterval(() => {
+          const currentWidth = parseInt(progressBar.style.width);
+          if (currentWidth < 100) {
+            progressBar.style.width = currentWidth + 10 + '%';
+          } else {
+            clearInterval(uploadSimulation);
+          }
+        }, 500);
+      });
+    </script>

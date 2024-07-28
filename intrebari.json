@@ -1,0 +1,44 @@
+[    {        "intrebare": "Care este ingredientul principal al unei Margarita autentice?",        "variante": [            "Vodka",            "Tequila",            "Rum",            "Gin"        ],
+        "corect": 1
+    },
+    {
+        "intrebare": "Ce băutură se obține prin fermentarea boabelor de cafea?",
+        "variante": [
+            "Vin",
+            "Bere",
+            "Suc",
+            "Cafea"
+        ],
+        "corect": 3
+    },
+    {
+        "intrebare": "Care dintre următoarele băuturi este obținută prin distilarea vinului?",
+        "variante": [
+            "Vodka",
+            "Whisky",
+            "Rum",
+            "Gin"
+        ],
+        "corect": 0
+    },
+    {
+        "intrebare": "Care este principalul ingredient al unui Mojito clasic?",
+        "variante": [
+            "Vodka",
+            "Rum",
+            "Tequila",
+            "Gin"
+        ],
+        "corect": 1
+    },
+    {
+        "intrebare": "Care dintre următoarele băuturi este considerată tradițională în Japonia?",
+        "variante": [
+            "Sake",
+            "Tequila",
+            "Vodka",
+            "Rum"
+        ],
+        "corect": 0
+    }
+]

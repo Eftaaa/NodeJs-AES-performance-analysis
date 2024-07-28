@@ -1,0 +1,37 @@
+<h1>Produse în Coș</h1>
+<% if (cart.length === 0) { %>
+  <p>Coșul este gol.</p>
+<% } else { %>
+  <% console.log(cart); %>
+  <% console.log(total); %>
+  <table>
+    <tr>
+      <th>Produs</th>
+      <th>Preț</th>
+      <th>Cantitate</th>
+      <th>Total</th>
+    </tr>
+    <% 
+      const uniqueProducts = Array.from(new Set(cart.map(product => product.id)));
+      let totalPrice = 0;
+      uniqueProducts.forEach(productId => {
+        const product = cart.find(item => item.id === productId);
+        const quantity = cart.filter(item => item.id === productId).length;
+        const productTotalPrice = parseFloat(product.pret) * quantity;
+        totalPrice += productTotalPrice;
+    %>
+      <tr>
+        <td><%= product.nume %></td>
+        <td><%= product.pret %></td>
+        <td><%= quantity %></td>
+        <td><%= productTotalPrice.toFixed(2) %></td>
+      </tr>
+    <% }); %>
+    <tr>
+      <td>Total</td>
+      <td></td>
+      <td></td>
+      <td><%= totalPrice.toFixed(2) %></td>
+    </tr>
+  </table>
+<% } %>

@@ -1,0 +1,17 @@
+
+<form method="POST" action="/verificare-autentificare">
+   
+    <label for="username">Utilizator:</label><br>
+    <input type="text" id="username" name="username">
+    <br>
+    <br>
+
+    <label for="password">Parolă:</label><br>
+    <input type="password" id="password" name="password">
+    <br> 
+    <button type="submit">Autentificare</button>
+    <% if (req.cookies && req.cookies.mesajEroare) { %>
+      <p style="color: red"><%= req.cookies.mesajEroare %></p>
+    <% } %>
+  </form>
+ 
