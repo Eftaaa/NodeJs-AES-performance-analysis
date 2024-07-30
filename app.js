@@ -5,6 +5,7 @@ const bodyParser = require('body-parser')
 const app = express();
 const session = require('express-session');
 const path = require('path');
+const crypto = require('crypto');
 var sqlite3 = require('sqlite3');
 var db;
 app.use(cookieParser());
@@ -94,7 +95,37 @@ app.get('/', (req, res) => {
 });
 
 
+app.post('/encrypt', (req, res) => {
+  const { content } = req.body;
 
+  if (!content) {
+    res.status(400).send('Content is missing');
+    return;
+  }
+
+  const key = Buffer.from('feffe9928665731c6d6a8f9467308308', 'hex');
+  const iv = Buffer.alloc(12, 0); // 12 zero bytes IV
+
+  const start = process.hrtime();
+
+  const cipher = crypto.createCipheriv('aes-128-gcm', key, iv);
+  let encrypted = cipher.update(content, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const authTag = cipher.getAuthTag().toString('hex');
+
+  const end = process.hrtime(start);
+  const timeTaken = (end[0] * 1e9 + end[1]) / 1e6; // time in milliseconds
+
+  console.log('Encrypted data:', encrypted);
+  console.log('Auth Tag:', authTag);
+  console.log(`Time taken: ${timeTaken} ms`);
+
+  res.json({
+    encrypted,
+    authTag,
+    timeTaken
+  });
+});
 app.get('/creare-bd', (req, res) => {
   db = new sqlite3.Database('cumparaturi.db', (err) => {
     if (err) throw err;
