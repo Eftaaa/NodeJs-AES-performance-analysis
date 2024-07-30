@@ -109,6 +109,7 @@ app.post('/encrypt', (req, res) => {
   const start = process.hrtime();
 
   const cipher = crypto.createCipheriv('aes-128-gcm', key, iv);
+  
   let encrypted = cipher.update(content, 'utf8', 'hex');
   encrypted += cipher.final('hex');
   const authTag = cipher.getAuthTag().toString('hex');
@@ -357,6 +358,36 @@ app.post('/verificare-autentificare', (req, res) => {
     console.log("Username sau parola gresita");
   }
 });
+
+app.get('/inregistrare', (req, res) => {
+  res.render('inregistrare', { errorMessage: null });
+});
+app.post('/inregistrare', (req, res) => {
+  const { username, password } = req.body;
+
+  // Check if the username already exists
+  const userExists = users.some(user => user.utilizator === username);
+  if (userExists) {
+    // Render the registration page with an error message
+    return res.render('inregistrare', { errorMessage: 'Username already exists. Please choose another one.' });
+  }
+
+  // Add new user with admin set to false
+  const newUser = { utilizator: username, parola: password, admin: false };
+  users.push(newUser);
+
+  // Save the updated user list back to the file
+  fs.writeFile('utilizatori.json', JSON.stringify(users, null, 2), (err) => {
+    if (err) {
+      console.error('Error saving user data:', err);
+      return res.status(500).send('Internal Server Error');
+    }
+
+    // Redirect to the login page after successful registration
+    res.redirect('/autentificare');
+  });
+});
+
 app.get('/upload_file', (req, res) => {
 res.render("upload_file");
 

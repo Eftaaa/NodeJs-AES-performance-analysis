@@ -12,9 +12,20 @@
 
 <body>
 
-  <nav class="nav">
-    <a href="/" class="active">Demo Page</a>
-    <a href="upload_file">Upload File</a>
+  <nav class="nav"><ul>
+   <li> <a href="/" class="active">Demo Page</a></li>
+   <li> <a href="upload_file">Upload File</a></li>
+   <% if (username == null) { %>
+    <li><a href="/autentificare">Login</a></li>
+    <li><a href="/inregistrare">Sign up</a></li>
+  <% } %>
+ 
+
+  </ul>
+ <% if (username != null) { %>
+      <h1>Bine ai venit, <%= username %>!</h1>
+      <p>Autentificat ca <b><%= username %></b> | <a href="/autentificare">Deconectare</a></p>
+    <% } %>
   </nav>
 
   <main>
@@ -50,12 +61,6 @@
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({ content: siteDemoContent })
-        })
-        .then(response => response.json())
-        .then(data => {
-          console.log('Encrypted data:', data.encrypted);
-          console.log('Auth Tag:', data.authTag);
-          console.log(`Time taken: ${data.timeTaken} ms`);
         })
         .catch(error => {
           console.error('Error:', error);
