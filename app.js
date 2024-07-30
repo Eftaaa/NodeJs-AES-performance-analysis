@@ -6,6 +6,7 @@ const app = express();
 const session = require('express-session');
 const path = require('path');
 const crypto = require('crypto');
+const { exec } = require('child_process');
 var sqlite3 = require('sqlite3');
 var db;
 app.use(cookieParser());
@@ -94,7 +95,6 @@ app.get('/', (req, res) => {
 
 });
 
-
 app.post('/encrypt', (req, res) => {
   const { content } = req.body;
 
@@ -106,25 +106,55 @@ app.post('/encrypt', (req, res) => {
   const key = Buffer.from('feffe9928665731c6d6a8f9467308308', 'hex');
   const iv = Buffer.alloc(12, 0); // 12 zero bytes IV
 
-  const start = process.hrtime();
-
+  // First Encryption: AES-GCM in Node.js
+  const startFirstEncryption = process.hrtime();
   const cipher = crypto.createCipheriv('aes-128-gcm', key, iv);
-  
   let encrypted = cipher.update(content, 'utf8', 'hex');
   encrypted += cipher.final('hex');
   const authTag = cipher.getAuthTag().toString('hex');
+  const endFirstEncryption = process.hrtime(startFirstEncryption);
+  const timeTakenFirst = (endFirstEncryption[0] * 1e9 + endFirstEncryption[1]) / 1e6; // time in milliseconds
 
-  const end = process.hrtime(start);
-  const timeTaken = (end[0] * 1e9 + end[1]) / 1e6; // time in milliseconds
+  console.log('First Encryption Auth Tag:', authTag);
+  console.log(`First Encryption Time taken: ${timeTakenFirst} ms`);
 
-  console.log('Encrypted data:', encrypted);
-  console.log('Auth Tag:', authTag);
-  console.log(`Time taken: ${timeTaken} ms`);
+  // Second Encryption: Using C++ program
+  const tempInputFile = path.join(__dirname, 'temp_input.txt');
+  const keyFile = path.join(__dirname, 'key.txt'); // Path to the key file
+  const aedFile = path.join(__dirname, 'views', 'blank.ejs'); // Path to the AED file
 
-  res.json({
-    encrypted,
-    authTag,
-    timeTaken
+  // Write the content to a temporary file for the C++ program
+  fs.writeFileSync(tempInputFile, content);
+
+  const command = `criptare.exe "${tempInputFile}" "${keyFile}" "${aedFile}"`;
+  exec(command, (err, stdout, stderr) => {
+    if (err) {
+      console.error('Error executing C++ program:', err);
+      res.status(500).send('Error during the second encryption process');
+      return;
+    }
+
+    // Extract the authentication tag and encryption time from the C++ program's output
+    let timeTakenSecond = 0;
+    let authTagCpp = '';
+    const timeMatch = stdout.match(/Encryption time: (\d+\.\d+) ms/);
+    const tagMatch = stdout.match(/Tag from the c\+\+ program: (.+)/);
+
+    if (timeMatch && timeMatch[1]) {
+      timeTakenSecond = parseFloat(timeMatch[1]);
+    }
+    if (tagMatch && tagMatch[1]) {
+      authTagCpp = tagMatch[1].trim();
+    }
+
+    console.log(`Second Encryption Auth Tag: ${authTagCpp}`);
+    console.log(`Second Encryption Time taken: ${timeTakenSecond} ms`);
+
+    // Cleanup temporary file
+    fs.unlinkSync(tempInputFile);
+
+    // Send the response back to the client, including both encryptions
+ 
   });
 });
 app.get('/creare-bd', (req, res) => {

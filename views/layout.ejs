@@ -12,20 +12,9 @@
 
 <body>
 
-  <nav class="nav"><ul>
-   <li> <a href="/" class="active">Demo Page</a></li>
-   <li> <a href="upload_file">Upload File</a></li>
-   <% if (username == null) { %>
-    <li><a href="/autentificare">Login</a></li>
-    <li><a href="/inregistrare">Sign up</a></li>
-  <% } %>
- 
-
-  </ul>
- <% if (username != null) { %>
-      <h1>Bine ai venit, <%= username %>!</h1>
-      <p>Autentificat ca <b><%= username %></b> | <a href="/autentificare">Deconectare</a></p>
-    <% } %>
+  <nav class="nav">
+    <a href="/" class="active">Demo Page</a>
+    <a href="upload_file">Upload File</a>
   </nav>
 
   <main>
@@ -64,7 +53,7 @@
         })
         .catch(error => {
           console.error('Error:', error);
-        });
+        })
       });
     </script>
   </main>
