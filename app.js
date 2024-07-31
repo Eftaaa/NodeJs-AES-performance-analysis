@@ -50,6 +50,10 @@ app.use((req, res, next) => {
     }
 
   }
+  res.locals.username = req.cookies.username;
+  res.locals.session = req.session;
+  res.locals.layout = 'layout'; // Specify the layout file explicitly
+  
   next();
 });
 // Configurare sesiuni
@@ -236,12 +240,7 @@ app.get('/inserare-bd', (req, res) => {
 });
 
 
-app.use((req, res, next) => {
-  res.locals.username = req.cookies.username;
-  res.locals.session = req.session;
-  res.locals.layout = 'layout'; // Specify the layout file explicitly
-  next();
-});
+
 
 
 
