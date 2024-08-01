@@ -7,53 +7,68 @@
     <link rel="stylesheet" type="text/css" href="../stil.css" />
   </head>
 
-  <nav class="nav">
-    <a href="/" class="active">Demo Page</a>
-    <a href="upload_file">Upload File</a>
-  </nav>
+  <body>
+    <nav class="nav">
+      <ul>
+        <li><a href="/" class="active">Demo Page</a></li>
+        <li><a href="upload_file">Upload File</a></li>
+        <% if (username == null) { %>
+        <li><a href="/autentificare">Login</a></li>
+        <li><a href="/inregistrare">Sign up</a></li>
+        <% } %>
+      </ul>
+      <% if (username != null) { %>
+      <h1>Bine ai venit, <%= username %>!</h1>
+      <p>
+        Autentificat ca <b><%= username %></b> |
+        <a href="/autentificare">Deconectare</a>
+      </p>
+      <% } %>
+    </nav>
 
-  <main>
-    <div class="container-cr">
-      <div class="header-container">
-        <h2>Encryption Methods:</h2>
-        <p>AES-GCM Encryption (Program 1)</p>
-        <p>OpenSSL AES-GCM Encryption (Program 2)</p>
-        <button id="encryptButton">Encrypt Page</button>
+    <main>
+      <div class="container-cr">
+        <div class="header-container">
+          <h2>Encryption Methods:</h2>
+          <p>AES-GCM Encryption (Program 1)</p>
+          <p>OpenSSL AES-GCM Encryption (Program 2)</p>
+          <button id="encryptButton">Encrypt Page</button>
+        </div>
       </div>
-    </div>
 
-    <div class="site-demo"><%- body %></div>
+      <div class="site-demo"><%- body %></div>
 
-    <div class="Statistici">
-      <!-- This is where the database output for the elapsed time will be displayed -->
-      <h3>Encryption Statistics</h3>
-      <div id="encryptionStats">
-        <!-- The elapsed time data will be dynamically inserted here -->
+      <div class="Statistici">
+        <!-- This is where the database output for the elapsed time will be displayed -->
+        <h3>Encryption Statistics</h3>
+        <div id="encryptionStats">
+          <!-- The elapsed time data will be dynamically inserted here -->
+        </div>
       </div>
-    </div>
-    <script>
-      document
-        .getElementById("encryptButton")
-        .addEventListener("click", function () {
-          // Extract the HTML content inside the div with class "site-demo"
-          const siteDemoContent =
-            document.querySelector(".site-demo").innerHTML;
+      <script>
+        document
+          .getElementById("encryptButton")
+          .addEventListener("click", function () {
+            // Extract the HTML content inside the div with class "site-demo"
+            const siteDemoContent =
+              document.querySelector(".site-demo").innerHTML;
 
-          // Send the content to the server for encryption
-          fetch("/encrypt", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ content: siteDemoContent }),
-          }).catch((error) => {
-            console.error("Error:", error);
+            // Send the content to the server for encryption
+            fetch("/encrypt", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ content: siteDemoContent }),
+            }).catch((error) => {
+              console.error("Error:", error);
+            });
           });
-        });
-    </script>
-  </main>
+      </script>
+    </main>
 
-  <footer>
-    <p>&copy; 2023 Eftasiu David.</p>
-  </footer>
+    <footer>
+      <p>&copy; 2023 Eftasiu David.</p>
+    </footer>
+  </body>
 </html>

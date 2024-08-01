@@ -8,10 +8,5 @@
     "utilizator": "Efta",
     "parola": "admin",
     "admin": true
-  },
-  {
-    "utilizator": "elton",
-    "parola": "1234",
-    "admin": false
   }
 ]
