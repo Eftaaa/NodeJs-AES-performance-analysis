@@ -1,16 +1,11 @@
 <!DOCTYPE html>
 <html>
-
-<head>
-  <% var pageTitle='Chestionar online' %>
-  <meta charset="utf-8">
-  <title>
-    <%= pageTitle %>
-  </title>
-  <link rel="stylesheet" type="text/css" href="../stil.css">
-</head>
-
-
+  <head>
+    <% var pageTitle='Chestionar online' %>
+    <meta charset="utf-8" />
+    <title><%= pageTitle %></title>
+    <link rel="stylesheet" type="text/css" href="../stil.css" />
+  </head>
 
   <nav class="nav">
     <a href="/" class="active">Demo Page</a>
@@ -27,10 +22,8 @@
       </div>
     </div>
 
-    <div class="site-demo">
-      <%- body %>
-    </div>
-    
+    <div class="site-demo"><%- body %></div>
+
     <div class="Statistici">
       <!-- This is where the database output for the elapsed time will be displayed -->
       <h3>Encryption Statistics</h3>
@@ -39,28 +32,28 @@
       </div>
     </div>
     <script>
-      document.getElementById('encryptButton').addEventListener('click', function() {
-        // Extract the HTML content inside the div with class "site-demo"
-        const siteDemoContent = document.querySelector('.site-demo').innerHTML;
-  
-        // Send the content to the server for encryption
-        fetch('/encrypt', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ content: siteDemoContent })
-        })
-        .catch(error => {
-          console.error('Error:', error);
-        })
-      });
+      document
+        .getElementById("encryptButton")
+        .addEventListener("click", function () {
+          // Extract the HTML content inside the div with class "site-demo"
+          const siteDemoContent =
+            document.querySelector(".site-demo").innerHTML;
+
+          // Send the content to the server for encryption
+          fetch("/encrypt", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ content: siteDemoContent }),
+          }).catch((error) => {
+            console.error("Error:", error);
+          });
+        });
     </script>
   </main>
 
   <footer>
     <p>&copy; 2023 Eftasiu David.</p>
   </footer>
-
-
 </html>
