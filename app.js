@@ -105,12 +105,42 @@ app.get("/", (req, res) => {
     });
   });
 });
+app.get("/encryption-stats", (req, res) => {
+  const username = req.cookies.username;
+  if (!username) {
+    res
+      .status(401)
+      .send("You must be logged in to view encryption statistics.");
+    return;
+  }
 
+  const query = `
+    SELECT first_encryption_time, second_encryption_time, timestamp 
+    FROM encryption 
+    WHERE username = ? 
+    ORDER BY timestamp DESC`;
+
+  db.all(query, [username], (err, rows) => {
+    if (err) {
+      console.error("Error querying the database:", err);
+      res.status(500).send("Error fetching encryption statistics");
+      return;
+    }
+
+    res.json(rows);
+  });
+});
 app.post("/encrypt", (req, res) => {
   const { content } = req.body;
 
   if (!content) {
     res.status(400).send("Content is missing");
+    return;
+  }
+
+  const username = req.cookies.username;
+  if (!username) {
+    res.status(401).send("You must be logged in to perform this action.");
     return;
   }
 
@@ -165,7 +195,27 @@ app.post("/encrypt", (req, res) => {
     // Cleanup temporary file
     fs.unlinkSync(tempInputFile);
 
-    // Send the response back to the client, including both encryptions
+    // Save the encryption times to the database
+    const insertQuery = `
+      INSERT INTO encryption (username, first_encryption_time, second_encryption_time, timestamp) 
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP)`;
+
+    db.run(
+      insertQuery,
+      [username, timeTakenFirst, timeTakenSecond],
+      function (err) {
+        if (err) {
+          console.error("Error inserting data into the database:", err);
+          res.status(500).send("Error saving encryption times to the database");
+          return;
+        }
+
+        console.log("Encryption times saved successfully.");
+        res
+          .status(200)
+          .send("Encryption successful and times saved to the database.");
+      }
+    );
   });
 });
 app.get("/creare-bd", (req, res) => {

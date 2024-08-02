@@ -39,11 +39,8 @@
       <div class="site-demo"><%- body %></div>
 
       <div class="Statistici">
-        <!-- This is where the database output for the elapsed time will be displayed -->
         <h3>Encryption Statistics</h3>
-        <div id="encryptionStats">
-          <!-- The elapsed time data will be dynamically inserted here -->
-        </div>
+        <div id="encryptionStats"></div>
       </div>
       <script>
         document
@@ -60,10 +57,71 @@
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({ content: siteDemoContent }),
-            }).catch((error) => {
+            })
+              .then((response) => {
+                if (response.status === 401) {
+                  alert("You must be logged in to perform this action.");
+                  window.location.href = "/autentificare"; // Redirect to the login page
+                } else if (!response.ok) {
+                  throw new Error("Error during encryption");
+                }
+                return response.text();
+              })
+              .then((data) => {
+                console.log("Success:", data);
+                // Update the encryption statistics on the page
+                fetchEncryptionStats();
+              })
+              .catch((error) => {
+                console.error("Error:", error);
+              });
+          });
+
+        function fetchEncryptionStats() {
+          fetch("/encryption-stats")
+            .then((response) => {
+              if (!response.ok) {
+                throw new Error("Error fetching encryption statistics");
+              }
+              return response.json();
+            })
+            .then((data) => {
+              const statsDiv = document.getElementById("encryptionStats");
+              if (data.length === 0) {
+                statsDiv.innerHTML =
+                  "<p>No encryption statistics available.</p>";
+                return;
+              }
+
+              const table = document.createElement("table");
+              table.innerHTML = `
+                <tr>
+                  <th>First Encryption Time (ms)</th>
+                  <th>Second Encryption Time (ms)</th>
+                  <th>Timestamp</th>
+                </tr>
+              `;
+
+              data.forEach((row) => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                  <td>${row.first_encryption_time}</td>
+                  <td>${row.second_encryption_time}</td>
+                  <td>${new Date(row.timestamp).toLocaleString()}</td>
+                `;
+                table.appendChild(tr);
+              });
+
+              statsDiv.innerHTML = "";
+              statsDiv.appendChild(table);
+            })
+            .catch((error) => {
               console.error("Error:", error);
             });
-          });
+        }
+
+        // Fetch encryption statistics when the page loads
+        document.addEventListener("DOMContentLoaded", fetchEncryptionStats);
       </script>
     </main>
 
