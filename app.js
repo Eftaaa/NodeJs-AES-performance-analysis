@@ -115,7 +115,7 @@ app.get("/encryption-stats", (req, res) => {
   }
 
   const query = `
-    SELECT first_encryption_time, second_encryption_time, timestamp 
+    SELECT first_encryption_time, second_encryption_time, timestamp, name 
     FROM encryption 
     WHERE username = ? 
     ORDER BY timestamp DESC`;
@@ -195,14 +195,23 @@ app.post("/encrypt", (req, res) => {
     // Cleanup temporary file
     fs.unlinkSync(tempInputFile);
 
+    // Get the current local time
+    const currentDate = new Date();
+    const offset = currentDate.getTimezoneOffset();
+    const localDate = new Date(currentDate.getTime() - offset * 60 * 1000);
+    const formattedDate = localDate
+      .toISOString()
+      .replace("T", " ")
+      .substring(0, 19);
+
     // Save the encryption times to the database
     const insertQuery = `
       INSERT INTO encryption (username, first_encryption_time, second_encryption_time, timestamp) 
-      VALUES (?, ?, ?, CURRENT_TIMESTAMP)`;
+      VALUES (?, ?, ?, ?)`;
 
     db.run(
       insertQuery,
-      [username, timeTakenFirst, timeTakenSecond],
+      [username, timeTakenFirst, timeTakenSecond, formattedDate],
       function (err) {
         if (err) {
           console.error("Error inserting data into the database:", err);
@@ -218,6 +227,7 @@ app.post("/encrypt", (req, res) => {
     );
   });
 });
+
 app.get("/creare-bd", (req, res) => {
   db.serialize(() => {
     // Create the 'produse' table if it doesn't exist
@@ -262,7 +272,8 @@ app.get("/creare-bd", (req, res) => {
             username TEXT,
             first_encryption_time REAL,
             second_encryption_time REAL,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            Name TEXT
           )`,
           (err) => {
             if (err) throw err;
