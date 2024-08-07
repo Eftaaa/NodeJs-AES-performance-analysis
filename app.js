@@ -6,6 +6,8 @@ const app = express();
 const session = require("express-session");
 const path = require("path");
 const crypto = require("crypto");
+const multer = require("multer");
+const upload = multer({ dest: "uploads/" });
 const { exec } = require("child_process");
 var sqlite3 = require("sqlite3");
 var db;
@@ -128,6 +130,124 @@ app.get("/encryption-stats", (req, res) => {
     }
 
     res.json(rows);
+  });
+});
+app.post("/upload-encrypt", upload.single("file"), (req, res) => {
+  const file = req.file;
+
+  if (!file) {
+    res.status(400).send("File is missing");
+    return;
+  }
+
+  const username = req.cookies.username;
+  if (!username) {
+    res.status(401).send("You must be logged in to perform this action.");
+    return;
+  }
+
+  const key = Buffer.from("feffe9928665731c6d6a8f9467308308", "hex");
+  const iv = Buffer.alloc(12, 0); // 12 zero bytes IV
+
+  const handleEncryption = (file, filename) => {
+    // First Encryption: AES-GCM in Node.js
+    const startFirstEncryption = process.hrtime();
+    const cipher = crypto.createCipheriv("aes-128-gcm", key, iv);
+    let encrypted = cipher.update(file, "utf8", "hex");
+    encrypted += cipher.final("hex");
+    const authTag = cipher.getAuthTag().toString("hex");
+    const endFirstEncryption = process.hrtime(startFirstEncryption);
+    const timeTakenFirst =
+      (endFirstEncryption[0] * 1e9 + endFirstEncryption[1]) / 1e6; // time in milliseconds
+
+    console.log("First Encryption Auth Tag:", authTag);
+    console.log(`First Encryption Time taken: ${timeTakenFirst} ms`);
+
+    // Second Encryption: Using C++ program
+    const tempInputFile = path.join(__dirname, "temp_input.txt");
+    const keyFile = path.join(__dirname, "key.txt"); // Path to the key file
+    const aedFile = path.join(__dirname, "views", "blank.ejs"); // Path to the AED file
+
+    // Write the content to a temporary file for the C++ program
+    fs.writeFileSync(tempInputFile, file);
+
+    const command = `criptare.exe "${tempInputFile}" "${keyFile}" "${aedFile}"`;
+    exec(command, (err, stdout, stderr) => {
+      if (err) {
+        console.error("Error executing C++ program:", err);
+        res.status(500).send("Error during the second encryption process");
+        return;
+      }
+
+      // Extract the authentication tag and encryption time from the C++ program's output
+      let timeTakenSecond = 0;
+      let authTagCpp = "";
+      console.log("Output from C++ program:", stdout);
+      const timeMatch = stdout.match(/Encryption time: (\d+\.\d+) ms/);
+      const tagMatch = stdout.match(/Tag from the c\+\+ program: (.+)/);
+
+      if (timeMatch && timeMatch[1]) {
+        timeTakenSecond = parseFloat(timeMatch[1]);
+      } else {
+        const timeMatch2 = stdout.match(/Encryption time: (\d+) ms/);
+        if (timeMatch2 && timeMatch2[1]) {
+          timeTakenSecond = parseFloat(timeMatch2[1]);
+        }
+      }
+      if (tagMatch && tagMatch[1]) {
+        authTagCpp = tagMatch[1].trim();
+      }
+
+      console.log(`Second Encryption Auth Tag: ${authTagCpp}`);
+      console.log(`Second Encryption Time taken: ${timeTakenSecond} ms`);
+
+      // Cleanup temporary files
+      fs.unlinkSync(tempInputFile);
+
+      // Get the current local time
+      const currentDate = new Date();
+      const offset = currentDate.getTimezoneOffset();
+      const localDate = new Date(currentDate.getTime() - offset * 60 * 1000);
+      const formattedDate = localDate
+        .toISOString()
+        .replace("T", " ")
+        .substring(0, 19);
+
+      // Save the encryption times to the database
+      const insertQuery = `
+        INSERT INTO encryption (username, first_encryption_time, second_encryption_time, timestamp, name) 
+        VALUES (?, ?, ?, ?, ?)`;
+
+      db.run(
+        insertQuery,
+        [username, timeTakenFirst, timeTakenSecond, formattedDate, filename],
+        function (err) {
+          if (err) {
+            console.error("Error inserting data into the database:", err);
+            res
+              .status(500)
+              .send("Error saving encryption times to the database");
+            return;
+          }
+
+          console.log("Encryption times saved successfully.");
+          res
+            .status(200)
+            .send("Encryption successful and times saved to the database.");
+        }
+      );
+    });
+  };
+
+  fs.readFile(file.path, "utf8", (err, fileContent) => {
+    if (err) {
+      console.error("Error reading uploaded file:", err);
+      res.status(500).send("Error reading uploaded file");
+      return;
+    }
+
+    handleEncryption(fileContent, file.originalname);
+    fs.unlinkSync(file.path); // Clean up the uploaded file
   });
 });
 app.post("/encrypt", (req, res) => {
