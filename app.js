@@ -211,6 +211,11 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
 
       if (timeMatch && timeMatch[1]) {
         timeTakenSecond = parseFloat(timeMatch[1]);
+      } else {
+        const timeMatch2 = stdout.match(/Encryption time: (\d+) ms/);
+        if (timeMatch2 && timeMatch2[1]) {
+          timeTakenSecond = parseFloat(timeMatch2[1]);
+        }
       }
       if (tagMatch && tagMatch[1]) {
         authTagCpp = tagMatch[1].trim();
@@ -343,14 +348,17 @@ app.post("/encrypt", (req, res) => {
     let authTagCpp = "";
     const timeMatch = stdoutData.match(/Encryption time: (\d+\.\d+) ms/);
     const tagMatch = stdoutData.match(/Tag from the c\+\+ program: (.+)/);
-
     if (timeMatch && timeMatch[1]) {
       timeTakenSecond = parseFloat(timeMatch[1]);
+    } else {
+      const timeMatch2 = stdout.match(/Encryption time: (\d+) ms/);
+      if (timeMatch2 && timeMatch2[1]) {
+        timeTakenSecond = parseFloat(timeMatch2[1]);
+      }
     }
     if (tagMatch && tagMatch[1]) {
       authTagCpp = tagMatch[1].trim();
     }
-
     console.log(`Second Encryption Auth Tag: ${authTagCpp}`);
     console.log(`Second Encryption Time taken: ${timeTakenSecond} ms`);
 
