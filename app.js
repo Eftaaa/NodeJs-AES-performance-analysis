@@ -8,6 +8,7 @@ const path = require("path");
 const crypto = require("crypto");
 const multer = require("multer");
 const upload = multer({ dest: "uploads/" });
+const { spawn } = require("child_process");
 const { exec } = require("child_process");
 var sqlite3 = require("sqlite3");
 var db;
@@ -148,7 +149,7 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
 
   const key = Buffer.from("feffe9928665731c6d6a8f9467308308", "hex");
   const iv = Buffer.alloc(12, 0); // 12 zero bytes IV
-
+  const aed = Buffer.from("", "utf-8");
   const handleEncryption = (file, filename) => {
     // First Encryption: AES-GCM in Node.js
     const startFirstEncryption = process.hrtime();
@@ -162,37 +163,54 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
 
     console.log("First Encryption Auth Tag:", authTag);
     console.log(`First Encryption Time taken: ${timeTakenFirst} ms`);
+    // Convert the hex string to a Buffer
+    const keyBuffer = Buffer.from("feffe9928665731c6d6a8f9467308308", "utf-8");
 
-    // Second Encryption: Using C++ program
-    const tempInputFile = path.join(__dirname, "temp_input.txt");
-    const keyFile = path.join(__dirname, "key.txt"); // Path to the key file
-    const aedFile = path.join(__dirname, "views", "blank.ejs"); // Path to the AED file
+    // Encode the Buffer to a Base64 string
+    // Encode data, key, and AED using Base64
+    const dataBase64 = Buffer.from(file).toString("base64");
+    const keyBase64 = keyBuffer.toString("base64");
 
-    // Write the content to a temporary file for the C++ program
-    fs.writeFileSync(tempInputFile, file);
+    const aedBase64 = aed.toString("base64");
 
-    const command = `criptare.exe "${tempInputFile}" "${keyFile}" "${aedFile}"`;
-    exec(command, (err, stdout, stderr) => {
-      if (err) {
-        console.error("Error executing C++ program:", err);
-        res.status(500).send("Error during the second encryption process");
+    // Second Encryption: Using C++ program via stdin/stdout
+    const cppProcess = spawn("criptarebased.exe");
+
+    // Write the Base64-encoded data, key, and AED to the C++ program via stdin
+    cppProcess.stdin.write(dataBase64 + "\n");
+    cppProcess.stdin.write(keyBase64 + "\n");
+    cppProcess.stdin.write(aedBase64 + "\n");
+    cppProcess.stdin.end();
+
+    let stdoutData = "";
+    cppProcess.stdout.on("data", (data) => {
+      stdoutData += data.toString();
+    });
+    let stderrData = "";
+    cppProcess.stderr.on("data", (data) => {
+      stderrData += data.toString();
+    });
+    cppProcess.on("close", (code) => {
+      if (code !== 0) {
+        console.error("C++ program exited with error code:", code);
+        console.error("C++ program stderr output:", stderrData);
+
+        res
+          .status(500)
+          .send(
+            "Error during the second encryption process: " + stderrData.trim()
+          );
         return;
       }
 
-      // Extract the authentication tag and encryption time from the C++ program's output
+      // If the C++ program ran successfully, continue with processing stdout
       let timeTakenSecond = 0;
       let authTagCpp = "";
-      console.log("Output from C++ program:", stdout);
-      const timeMatch = stdout.match(/Encryption time: (\d+\.\d+) ms/);
-      const tagMatch = stdout.match(/Tag from the c\+\+ program: (.+)/);
+      const timeMatch = stdoutData.match(/Encryption time: (\d+\.\d+) ms/);
+      const tagMatch = stdoutData.match(/Tag from the c\+\+ program: (.+)/);
 
       if (timeMatch && timeMatch[1]) {
         timeTakenSecond = parseFloat(timeMatch[1]);
-      } else {
-        const timeMatch2 = stdout.match(/Encryption time: (\d+) ms/);
-        if (timeMatch2 && timeMatch2[1]) {
-          timeTakenSecond = parseFloat(timeMatch2[1]);
-        }
       }
       if (tagMatch && tagMatch[1]) {
         authTagCpp = tagMatch[1].trim();
@@ -200,9 +218,6 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
 
       console.log(`Second Encryption Auth Tag: ${authTagCpp}`);
       console.log(`Second Encryption Time taken: ${timeTakenSecond} ms`);
-
-      // Cleanup temporary files
-      fs.unlinkSync(tempInputFile);
 
       // Get the current local time
       const currentDate = new Date();
@@ -239,10 +254,12 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
     });
   };
 
-  fs.readFile(file.path, "utf8", (err, fileContent) => {
+  fs.readFile(file.path, (err, fileContent) => {
     if (err) {
       console.error("Error reading uploaded file:", err);
       res.status(500).send("Error reading uploaded file");
+      fs.unlinkSync(file.path); // Clean up the uploaded file
+
       return;
     }
 
@@ -266,6 +283,7 @@ app.post("/encrypt", (req, res) => {
 
   const key = Buffer.from("feffe9928665731c6d6a8f9467308308", "hex");
   const iv = Buffer.alloc(12, 0); // 12 zero bytes IV
+  const aed = Buffer.from("", "utf-8");
 
   // First Encryption: AES-GCM in Node.js
   const startFirstEncryption = process.hrtime();
@@ -280,27 +298,51 @@ app.post("/encrypt", (req, res) => {
   console.log("First Encryption Auth Tag:", authTag);
   console.log(`First Encryption Time taken: ${timeTakenFirst} ms`);
 
-  // Second Encryption: Using C++ program
-  const tempInputFile = path.join(__dirname, "temp_input.txt");
-  const keyFile = path.join(__dirname, "key.txt"); // Path to the key file
-  const aedFile = path.join(__dirname, "views", "blank.ejs"); // Path to the AED file
+  // Convert the hex string to a Buffer
+  const keyBuffer = Buffer.from("feffe9928665731c6d6a8f9467308308", "utf-8");
 
-  // Write the content to a temporary file for the C++ program
-  fs.writeFileSync(tempInputFile, content);
+  // Encode the Buffer to a Base64 string
+  // Encode data, key, and AED using Base64
+  const dataBase64 = Buffer.from(content, "utf-8").toString("base64");
+  const keyBase64 = keyBuffer.toString("base64");
 
-  const command = `criptare.exe "${tempInputFile}" "${keyFile}" "${aedFile}"`;
-  exec(command, (err, stdout, stderr) => {
-    if (err) {
-      console.error("Error executing C++ program:", err);
-      res.status(500).send("Error during the second encryption process");
+  const aedBase64 = aed.toString("base64");
+
+  // Second Encryption: Using C++ program via stdin/stdout
+  const cppProcess = spawn("criptarebased.exe");
+
+  // Write the Base64-encoded data, key, and AED to the C++ program via stdin
+  cppProcess.stdin.write(dataBase64 + "\n");
+  cppProcess.stdin.write(keyBase64 + "\n");
+  cppProcess.stdin.write(aedBase64 + "\n");
+  cppProcess.stdin.end();
+
+  let stdoutData = "";
+  cppProcess.stdout.on("data", (data) => {
+    stdoutData += data.toString();
+  });
+  let stderrData = "";
+  cppProcess.stderr.on("data", (data) => {
+    stderrData += data.toString();
+  });
+  cppProcess.on("close", (code) => {
+    if (code !== 0) {
+      console.error("C++ program exited with error code:", code);
+      console.error("C++ program stderr output:", stderrData);
+
+      res
+        .status(500)
+        .send(
+          "Error during the second encryption process: " + stderrData.trim()
+        );
       return;
     }
 
-    // Extract the authentication tag and encryption time from the C++ program's output
+    // If the C++ program ran successfully, continue with processing stdout
     let timeTakenSecond = 0;
     let authTagCpp = "";
-    const timeMatch = stdout.match(/Encryption time: (\d+\.\d+) ms/);
-    const tagMatch = stdout.match(/Tag from the c\+\+ program: (.+)/);
+    const timeMatch = stdoutData.match(/Encryption time: (\d+\.\d+) ms/);
+    const tagMatch = stdoutData.match(/Tag from the c\+\+ program: (.+)/);
 
     if (timeMatch && timeMatch[1]) {
       timeTakenSecond = parseFloat(timeMatch[1]);
@@ -311,9 +353,6 @@ app.post("/encrypt", (req, res) => {
 
     console.log(`Second Encryption Auth Tag: ${authTagCpp}`);
     console.log(`Second Encryption Time taken: ${timeTakenSecond} ms`);
-
-    // Cleanup temporary file
-    fs.unlinkSync(tempInputFile);
 
     // Get the current local time
     const currentDate = new Date();
@@ -510,6 +549,7 @@ app.get("/autentificare", (req, res) => {
   res.render("autentificare", { req });
 });
 const fs = require("fs");
+const { stderr } = require("process");
 const usersData = fs.readFileSync("utilizatori.json");
 const users = JSON.parse(usersData);
 
