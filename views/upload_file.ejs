@@ -81,7 +81,6 @@
         : "No file chosen";
       document.getElementById("file-name").textContent = fileName;
 
-      // Reset the progress bar
       const progressBar = document.getElementById("progress-bar");
       progressBar.style.width = "0%";
     });
@@ -113,6 +112,7 @@
       xhr.onload = function () {
         if (xhr.status === 200) {
           alert("File uploaded and encrypted successfully!");
+          fetchEncryptionStats();
         } else {
           alert("An error occurred during the upload.");
         }
@@ -120,4 +120,53 @@
 
       xhr.send(formData);
     });
+
+  function fetchEncryptionStats() {
+    fetch("/encryption-stats")
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Error fetching encryption statistics");
+        }
+        return response.json();
+      })
+      .then((data) => {
+        const statsDiv = document.getElementById("encryptionStats");
+        if (data.length === 0) {
+          statsDiv.innerHTML = "<p>No encryption statistics available.</p>";
+          return;
+        }
+
+        const table = document.createElement("table");
+        table.innerHTML = `
+          <tr>
+            <th>First Encryption Time (ms)</th>
+            <th>Second Encryption Time (ms)</th>
+            <th>Timestamp</th>
+            <th>Name</th>
+          </tr>
+        `;
+
+        data.forEach((row) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${row.first_encryption_time}</td>
+            <td>${row.second_encryption_time}</td>
+            <td>${new Date(row.timestamp).toLocaleString()}</td>
+            <td>${row.name || ""}</td>
+          `;
+          table.appendChild(tr);
+        });
+
+        statsDiv.innerHTML = "";
+        statsDiv.appendChild(table);
+      })
+      .catch((error) => {
+        console.error("Error:", error);
+        const statsDiv = document.getElementById("encryptionStats");
+        statsDiv.innerHTML =
+          "<p>Error fetching encryption statistics. Please try again later.</p>";
+      });
+  }
+
+  document.addEventListener("DOMContentLoaded", fetchEncryptionStats);
 </script>

@@ -29,11 +29,10 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.set("view engine", "ejs");
 // suport pentru layout-uri - implicit fișierul care reprezintă template-ul site-uluieste views/layout.ejs
 app.use(expressLayouts);
-// Define a map to store failed request counts for each user/IP
 
 const accessAttempts = new Map();
 const maxAccessAttempts = 1;
-const durationBlocked = 10 * 1000; // 10 seconds
+const durationBlocked = 10 * 1000;
 app.use((req, res, next) => {
   const internetprotol = req.ip;
 
@@ -51,11 +50,11 @@ app.use((req, res, next) => {
   }
   res.locals.username = req.cookies.username;
   res.locals.session = req.session;
-  res.locals.layout = "layout"; // Specify the layout file explicitly
+  res.locals.layout = "layout";
 
   next();
 });
-// Configurare sesiuni
+
 app.use(
   session({
     secret: "secret-key",
@@ -78,14 +77,12 @@ app.get("/", (req, res) => {
       const username = req.cookies.username;
       const authenticated = username ? true : false;
 
-      // Check if the 'produse' table exists
       db.get(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='produse'",
         (err, table) => {
           if (err) throw err;
 
           if (table) {
-            // Fetch all products from the 'produse' table
             db.all("SELECT * FROM produse", (err, rows) => {
               if (err) throw err;
               res.render("demo_page", {
@@ -148,7 +145,7 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
   }
 
   const key = Buffer.from("feffe9928665731c6d6a8f9467308308", "hex");
-  const iv = Buffer.alloc(12, 0); // 12 zero bytes IV
+  const iv = Buffer.alloc(12, 0);
   const aed = Buffer.from("", "utf-8");
   const handleEncryption = (file, filename) => {
     // First Encryption: AES-GCM in Node.js
@@ -203,7 +200,6 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
         return;
       }
 
-      // If the C++ program ran successfully, continue with processing stdout
       let timeTakenSecond = 0;
       let authTagCpp = "";
       const timeMatch = stdoutData.match(/Encryption time: (\d+\.\d+) ms/);
@@ -251,9 +247,7 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
           }
 
           console.log("Encryption times saved successfully.");
-          res
-            .status(200)
-            .send("Encryption successful and times saved to the database.");
+          res.status(200).json({ success: true });
         }
       );
     });
@@ -269,6 +263,7 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
     }
 
     handleEncryption(fileContent, file.originalname);
+
     fs.unlinkSync(file.path); // Clean up the uploaded file
   });
 });
@@ -406,7 +401,6 @@ app.get("/creare-bd", (req, res) => {
           'Tabela "produse" a fost creată cu succes sau deja există.'
         );
 
-        // Add some random drink records to the table
         const drinks = [
           { id: 1, nume: "Cola", pret: 2.5 },
           { id: 2, nume: "Limonadă", pret: 1.8 },
@@ -432,7 +426,6 @@ app.get("/creare-bd", (req, res) => {
           );
         });
 
-        // Create the 'encryption' table
         db.run(
           `CREATE TABLE IF NOT EXISTS encryption (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -449,7 +442,6 @@ app.get("/creare-bd", (req, res) => {
             );
           }
         );
-        // Redirect the client to "/"
         res.redirect("/");
       }
     );
@@ -697,8 +689,14 @@ app.post("/rezultat-chestionar", (req, res) => {
 
   const raspunsuri = [];
   for (let i = 0; i < intrebari.length; i++) {
-    const answer = req.body[`raspuns${i}`][0];
-    raspunsuri.push(answer);
+    const answer = req.body[`raspuns${i}`];
+
+    // Check if the answer exists; if not, handle it (e.g., set to null)
+    if (answer) {
+      raspunsuri.push(answer[0]); // If answer exists, push it to raspunsuri array
+    } else {
+      raspunsuri.push(null); // If no answer, push null or handle as needed
+    }
   }
 
   const variante = intrebari.map((intrebare) => intrebare.variante[0]);

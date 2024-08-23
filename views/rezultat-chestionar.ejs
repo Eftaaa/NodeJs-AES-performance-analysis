@@ -1,15 +1,23 @@
 <h1>Rezultatele chestionarului</h1>
 <ul>
   <% for (let i = 0; i < intrebari.length; i++) { %>
-    <li>
-      <h3>Intrebare <%= i + 1 %>:</h3>
-      <p><%= intrebari[i].intrebare %></p>
-      <p>Raspunsul tau: <%= intrebari[i].variante[raspunsuri[i]] %></p>
-      <% if (req.body['raspuns' + i][0] == intrebari[i].corect) { %>
-        <p><strong>Raspuns corect!</strong></p>
-      <% } else { %>
-        <p><strong>Raspuns gresit!</strong> Raspunsul corect: <%= intrebari[i].variante[intrebari[i].corect] %></p>
-      <% } %>
-    </li>
+  <li>
+    <h3>Intrebare <%= i + 1 %>:</h3>
+    <p><%= intrebari[i].intrebare %></p>
+
+    <% if (raspunsuri[i] !== null) { %>
+    <p>Raspunsul tau: <%= intrebari[i].variante[raspunsuri[i]] %></p>
+
+    <% if (raspunsuri[i] == intrebari[i].corect) { %>
+    <p><strong>Raspuns corect!</strong></p>
+    <% } else { %>
+    <p>
+      <strong>Raspuns gresit!</strong> Raspunsul corect: <%=
+      intrebari[i].variante[intrebari[i].corect] %>
+    </p>
+    <% } %> <% } else { %>
+    <p><strong>Nu ai raspuns la aceasta intrebare.</strong></p>
+    <% } %>
+  </li>
   <% } %>
 </ul>
