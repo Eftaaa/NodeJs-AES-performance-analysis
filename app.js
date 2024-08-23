@@ -147,10 +147,14 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
   const key = Buffer.from("feffe9928665731c6d6a8f9467308308", "hex");
   const iv = Buffer.alloc(12, 0);
   const aed = Buffer.from("", "utf-8");
+
   const handleEncryption = (file, filename) => {
     // First Encryption: AES-GCM in Node.js
     const startFirstEncryption = process.hrtime();
+    // Check if the Base64 encoded data exceeds the size limit
+
     const cipher = crypto.createCipheriv("aes-128-gcm", key, iv);
+
     let encrypted = cipher.update(file, "utf8", "hex");
     encrypted += cipher.final("hex");
     const authTag = cipher.getAuthTag().toString("hex");
@@ -160,16 +164,16 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
 
     console.log("First Encryption Auth Tag:", authTag);
     console.log(`First Encryption Time taken: ${timeTakenFirst} ms`);
+
     // Convert the hex string to a Buffer
     const keyBuffer = Buffer.from("feffe9928665731c6d6a8f9467308308", "utf-8");
 
     // Encode the Buffer to a Base64 string
+
+    const keyBase64 = keyBuffer.toString("base64");
+    const aedBase64 = aed.toString("base64");
     // Encode data, key, and AED using Base64
     const dataBase64 = Buffer.from(file).toString("base64");
-    const keyBase64 = keyBuffer.toString("base64");
-
-    const aedBase64 = aed.toString("base64");
-
     // Second Encryption: Using C++ program via stdin/stdout
     const cppProcess = spawn("criptarebased.exe");
 
@@ -208,7 +212,7 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
       if (timeMatch && timeMatch[1]) {
         timeTakenSecond = parseFloat(timeMatch[1]);
       } else {
-        const timeMatch2 = stdout.match(/Encryption time: (\d+) ms/);
+        const timeMatch2 = stdoutData.match(/Encryption time: (\d+) ms/);
         if (timeMatch2 && timeMatch2[1]) {
           timeTakenSecond = parseFloat(timeMatch2[1]);
         }
@@ -261,13 +265,51 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
 
       return;
     }
+    // Ensure the encryption table exists
+    const createTableQuery = `
+     CREATE TABLE IF NOT EXISTS encryption (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       username TEXT,
+       first_encryption_time REAL,
+       second_encryption_time REAL,
+       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+       name TEXT
+     )
+   `;
+
+    db.run(createTableQuery, (err) => {
+      if (err) {
+        console.error("Error creating the encryption table:", err);
+        res.status(500).send("Error creating the encryption table.");
+        return;
+      }
+    });
 
     handleEncryption(fileContent, file.originalname);
 
     fs.unlinkSync(file.path); // Clean up the uploaded file
   });
 });
+
 app.post("/encrypt", (req, res) => {
+  const createTableQuery = `
+      CREATE TABLE IF NOT EXISTS encryption (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT,
+        first_encryption_time REAL,
+        second_encryption_time REAL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        name TEXT
+      )
+    `;
+
+  db.run(createTableQuery, (err) => {
+    if (err) {
+      console.error("Error creating the encryption table:", err);
+      res.status(500).send("Error creating the encryption table.");
+      return;
+    }
+  });
   const { content } = req.body;
 
   if (!content) {
@@ -304,8 +346,20 @@ app.post("/encrypt", (req, res) => {
   // Encode the Buffer to a Base64 string
   // Encode data, key, and AED using Base64
   const dataBase64 = Buffer.from(content, "utf-8").toString("base64");
-  const keyBase64 = keyBuffer.toString("base64");
 
+  // Check if the Base64 encoded data exceeds the size limit
+  const sizeLimit = 0x1fffffe8;
+  if (dataBase64.length > sizeLimit) {
+    console.error("Error: Encoded data exceeds the size limit.");
+    res
+      .status(413) // HTTP status code 413: Payload Too Large
+      .send(
+        "Content is too large to be encrypted. The encoded data exceeds the size limit."
+      );
+    return;
+  }
+
+  const keyBase64 = keyBuffer.toString("base64");
   const aedBase64 = aed.toString("base64");
 
   // Second Encryption: Using C++ program via stdin/stdout

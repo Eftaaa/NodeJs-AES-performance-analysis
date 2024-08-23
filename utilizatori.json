@@ -5,18 +5,8 @@
     "admin": false
   },
   {
-    "utilizator": "Efta",
+    "utilizator": "admin",
     "parola": "admin",
     "admin": true
-  },
-  {
-    "utilizator": "elton",
-    "parola": "1234",
-    "admin": false
-  },
-  {
-    "utilizator": "norris",
-    "parola": "1234",
-    "admin": false
   }
 ]

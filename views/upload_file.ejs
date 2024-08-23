@@ -76,9 +76,8 @@
   document
     .getElementById("file-upload")
     .addEventListener("change", function (event) {
-      const fileName = event.target.files[0]
-        ? event.target.files[0].name
-        : "No file chosen";
+      const file = event.target.files[0];
+      const fileName = file ? file.name : "No file chosen";
       document.getElementById("file-name").textContent = fileName;
 
       const progressBar = document.getElementById("progress-bar");
@@ -95,6 +94,19 @@
       }
 
       const file = fileInput.files[0];
+      const maxBase64Size = 0x1fffffe8; // Maximum allowed size in base64 (approx 536.87 MB)
+
+      // Calculate the Base64 size
+      const fileSize = file.size;
+      const base64Size = Math.ceil((fileSize * 4) / 3);
+
+      if (base64Size > maxBase64Size) {
+        alert(
+          "File is too large. Maximum allowed size is 536.87 MB in Base64."
+        );
+        return;
+      }
+
       const formData = new FormData();
       formData.append("file", file);
 
@@ -112,6 +124,9 @@
       xhr.onload = function () {
         if (xhr.status === 200) {
           alert("File uploaded and encrypted successfully!");
+          fetchEncryptionStats();
+        } else if (xhr.status === 401) {
+          alert("You must be logged in to upload files.");
           fetchEncryptionStats();
         } else {
           alert("An error occurred during the upload.");
@@ -138,22 +153,22 @@
 
         const table = document.createElement("table");
         table.innerHTML = `
-          <tr>
-            <th>First Encryption Time (ms)</th>
-            <th>Second Encryption Time (ms)</th>
-            <th>Timestamp</th>
-            <th>Name</th>
-          </tr>
-        `;
+        <tr>
+          <th>First Encryption Time (ms)</th>
+          <th>Second Encryption Time (ms)</th>
+          <th>Timestamp</th>
+          <th>Name</th>
+        </tr>
+      `;
 
         data.forEach((row) => {
           const tr = document.createElement("tr");
           tr.innerHTML = `
-            <td>${row.first_encryption_time}</td>
-            <td>${row.second_encryption_time}</td>
-            <td>${new Date(row.timestamp).toLocaleString()}</td>
-            <td>${row.name || ""}</td>
-          `;
+          <td>${row.first_encryption_time}</td>
+          <td>${row.second_encryption_time}</td>
+          <td>${new Date(row.timestamp).toLocaleString()}</td>
+          <td>${row.name || ""}</td>
+        `;
           table.appendChild(tr);
         });
 
