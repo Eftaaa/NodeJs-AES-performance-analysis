@@ -12,6 +12,7 @@
       <ul>
         <li><a href="/" class="active">Demo Page</a></li>
         <li><a href="upload_file">Upload File</a></li>
+        <li><a href="/encryption_analysis">Encryption speed analysis</a></li>
         <% if (username == null) { %>
         <li><a href="/autentificare">Login</a></li>
         <li><a href="/inregistrare">Sign up</a></li>
@@ -92,8 +93,8 @@
               const table = document.createElement("table");
               table.innerHTML = `
                 <tr>
-                  <th>First Encryption Time (ms)</th>
-                  <th>Second Encryption Time (ms)</th>
+                  <th>Node.Js Encryption Time (ms)</th>
+                  <th>C++ Encryption Time (ms)</th>
                   <th>Timestamp</th>
                   <th>Name</th>
                 </tr>

@@ -120,14 +120,32 @@ app.get("/encryption-stats", (req, res) => {
     WHERE username = ? 
     ORDER BY timestamp DESC`;
 
-  db.all(query, [username], (err, rows) => {
+  const createTableQuery = `
+     CREATE TABLE IF NOT EXISTS encryption (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       username TEXT,
+       first_encryption_time REAL,
+       second_encryption_time REAL,
+       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+       name TEXT
+     )
+   `;
+
+  db.run(createTableQuery, (err) => {
     if (err) {
-      console.error("Error querying the database:", err);
-      res.status(500).send("Error fetching encryption statistics");
+      console.error("Error creating the encryption table:", err);
+      res.status(500).send("Error creating the encryption table.");
       return;
     }
+    db.all(query, [username], (err, rows) => {
+      if (err) {
+        console.error("Error querying the database:", err);
+        res.status(500).send("Error fetching encryption statistics");
+        return;
+      }
 
-    res.json(rows);
+      res.json(rows);
+    });
   });
 });
 app.post("/upload-encrypt", upload.single("file"), (req, res) => {
@@ -496,7 +514,330 @@ app.get("/creare-bd", (req, res) => {
             );
           }
         );
+        db.run(
+          `CREATE TABLE IF NOT EXISTS encryption_performance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT,
+    char_length INTEGER,
+    nodejs_encryption_time REAL,
+    cpp_encryption_time REAL
+)`,
+          (err) => {
+            if (err) throw err;
+            console.log(
+              'Tabela "encryption_performance" a fost creată cu succes sau deja există.'
+            );
+          }
+        );
         res.redirect("/");
+      }
+    );
+  });
+});
+// Encryption analysis route
+// Encryption analysis route
+app.get("/encryption_analysis", (req, res) => {
+  const username = req.cookies.username;
+
+  // Ensure the user is authenticated
+  if (!username) {
+    return res.status(401).send("You must be logged in to access this data.");
+  }
+
+  const createTableQuery = `
+    CREATE TABLE IF NOT EXISTS encryption_performance (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT,
+      char_length INTEGER,
+      nodejs_encryption_time REAL,
+      cpp_encryption_time REAL
+    )
+  `;
+
+  // Create the table if it doesn't exist
+  db.run(createTableQuery, (err) => {
+    if (err) {
+      console.error("Error creating table:", err);
+      return res
+        .status(500)
+        .send("Error creating the encryption performance table.");
+    }
+
+    // Table creation succeeded, now run the query
+    const query = `
+      SELECT char_length, nodejs_encryption_time, cpp_encryption_time
+      FROM encryption_performance 
+      WHERE user_id = ?
+      ORDER BY char_length ASC
+    `;
+
+    db.all(query, [username], (err, rows) => {
+      if (err) {
+        console.error(
+          `Error fetching encryption performance data for ${username}:`,
+          err
+        );
+        return res
+          .status(500)
+          .send("Error fetching encryption performance data.");
+      }
+
+      if (rows.length === 0) {
+        // No data available for this user
+        return res.render("encryption_analysis", {
+          dataAvailable: false,
+          username: username,
+        });
+      }
+
+      // Data is available, render the page with the performance data
+      res.render("encryption_analysis", {
+        dataAvailable: true,
+        performanceData: rows,
+        username: username,
+      });
+    });
+  });
+});
+
+let userProgress = {};
+// Encryption progress route
+app.get("/encryption-progress", (req, res) => {
+  const username = req.cookies.username;
+
+  if (!username) {
+    return res.status(401).send("You must be logged in to view progress.");
+  }
+
+  if (userProgress[username]) {
+    return res.json({
+      running: userProgress[username].running,
+      progress: userProgress[username].progress,
+    });
+  } else {
+    return res.json({ running: false, progress: 0 });
+  }
+});
+
+let activeCppProcesses = 0;
+const maxConcurrentCppProcesses = 10;
+
+app.post("/encrypt-performance-test", (req, res) => {
+  const username = req.cookies.username;
+  let responseSent = false;
+
+  const sendResponse = (statusCode, message) => {
+    if (!responseSent) {
+      responseSent = true;
+      userProgress[username].running = false;
+      res.status(statusCode).json({ message });
+    }
+  };
+
+  if (!username) {
+    return sendResponse(401, "You must be logged in to perform this action.");
+  }
+
+  const { nodeMin, nodeMax, nodeStep, cppMin, cppMax, cppStep } = req.body;
+
+  if (
+    ![nodeMin, nodeMax, nodeStep, cppMin, cppMax, cppStep].every(
+      (val) => Number.isInteger(val) && val >= 0
+    ) ||
+    nodeMin > nodeMax ||
+    cppMin > cppMax ||
+    nodeStep <= 0 ||
+    cppStep <= 0
+  ) {
+    return sendResponse(
+      400,
+      "Invalid input. Ensure min <= max and step > 0 for all values."
+    );
+  }
+
+  if (nodeMax > 100000000 || cppMax > 0x1fffffe8) {
+    return sendResponse(
+      400,
+      "Max character limit exceeded for Node.js or C++."
+    );
+  }
+
+  if (userProgress[username] && userProgress[username].running) {
+    return sendResponse(429, "running");
+  }
+
+  userProgress[username] = { running: true, progress: 0 };
+
+  const key = Buffer.from("feffe9928665731c6d6a8f9467308308", "hex");
+  const iv = Buffer.alloc(12, 0);
+  const aed = Buffer.from("", "utf-8");
+
+  const createTableQuery = `
+    CREATE TABLE IF NOT EXISTS encryption_performance (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT,
+      char_length INTEGER,
+      nodejs_encryption_time REAL,
+      cpp_encryption_time REAL
+    )
+  `;
+
+  db.run(createTableQuery, (err) => {
+    if (err) {
+      console.log("Error creating table:", err);
+      return sendResponse(500, "error");
+    }
+
+    db.run(
+      "DELETE FROM encryption_performance WHERE user_id = ?",
+      [username],
+      (err) => {
+        if (err) {
+          console.log("Error deleting old data:", err);
+          return sendResponse(500, "error");
+        }
+
+        const results = new Map();
+
+        const performEncryption = (method, charLength) => {
+          return new Promise((resolve, reject) => {
+            const content = "A".repeat(charLength);
+
+            if (method === "node") {
+              try {
+                const start = process.hrtime();
+                const cipher = crypto.createCipheriv("aes-128-gcm", key, iv);
+                cipher.update(content, "utf8", "hex");
+                cipher.final("hex");
+                const end = process.hrtime(start);
+                const timeTaken = (end[0] * 1e9 + end[1]) / 1e6;
+
+                const result = results.get(charLength) || {
+                  user_id: username,
+                  char_length: charLength,
+                  nodejs_encryption_time: null,
+                  cpp_encryption_time: null,
+                };
+
+                result.nodejs_encryption_time = timeTaken;
+                results.set(charLength, result);
+
+                userProgress[username].progress = (
+                  (charLength / (nodeMax + cppMax)) *
+                  100
+                ).toFixed(2);
+
+                resolve();
+              } catch (err) {
+                console.log("Error during Node.js encryption:", err);
+                reject(err);
+              }
+            } else if (method === "cpp") {
+              const runCppProcess = () => {
+                const cppProcess = spawn("criptarebased.exe");
+                activeCppProcesses++;
+                cppProcess.stdin.write(
+                  Buffer.from(content).toString("base64") + "\n"
+                );
+                const key2 = Buffer.from(
+                  "feffe9928665731c6d6a8f9467308308",
+                  "utf-8"
+                );
+                cppProcess.stdin.write(key2.toString("base64") + "\n");
+                cppProcess.stdin.write(aed.toString("base64") + "\n");
+                cppProcess.stdin.end();
+
+                let stdoutData = "";
+                cppProcess.stdout.on(
+                  "data",
+                  (data) => (stdoutData += data.toString())
+                );
+
+                cppProcess.on("close", (code) => {
+                  activeCppProcesses--;
+                  if (code !== 0) {
+                    console.log("C++ process exited with code:", code);
+                    return reject(new Error("C++ encryption error"));
+                  }
+
+                  const match = stdoutData.match(
+                    /Encryption time: (\d+\.\d+) ms/
+                  );
+                  const timeTaken = match ? parseFloat(match[1]) : 0;
+
+                  const result = results.get(charLength) || {
+                    user_id: username,
+                    char_length: charLength,
+                    nodejs_encryption_time: null,
+                    cpp_encryption_time: null,
+                  };
+
+                  result.cpp_encryption_time = timeTaken;
+                  results.set(charLength, result);
+
+                  // C++ progress calculation
+                  userProgress[username].progress = (
+                    ((charLength + nodeMax) / (nodeMax + cppMax)) *
+                    100
+                  ).toFixed(2);
+                  resolve();
+                });
+              };
+
+              const waitForSlot = () => {
+                if (activeCppProcesses < maxConcurrentCppProcesses) {
+                  runCppProcess();
+                } else {
+                  setTimeout(waitForSlot, 100);
+                }
+              };
+
+              waitForSlot();
+            }
+          });
+        };
+
+        const startEncryptionTasks = async () => {
+          const tasks = [];
+
+          for (let i = nodeMin; i <= nodeMax; i += nodeStep) {
+            tasks.push(performEncryption("node", i));
+          }
+
+          for (let i = cppMin; i <= cppMax; i += cppStep) {
+            tasks.push(performEncryption("cpp", i));
+          }
+
+          try {
+            await Promise.all(tasks);
+            insertResultsIntoDatabase();
+          } catch (err) {
+            console.log("Error during encryption tasks:", err);
+            return sendResponse(500, "error");
+          }
+        };
+
+        const insertResultsIntoDatabase = () => {
+          const insertQuery = `
+            INSERT INTO encryption_performance (user_id, char_length, nodejs_encryption_time, cpp_encryption_time)
+            VALUES (?, ?, ?, ?)
+          `;
+
+          db.serialize(() => {
+            const stmt = db.prepare(insertQuery);
+            for (const result of results.values()) {
+              stmt.run([
+                result.user_id,
+                result.char_length,
+                result.nodejs_encryption_time,
+                result.cpp_encryption_time,
+              ]);
+            }
+            stmt.finalize(() => sendResponse(200, "finished"));
+          });
+        };
+
+        startEncryptionTasks();
       }
     );
   });
