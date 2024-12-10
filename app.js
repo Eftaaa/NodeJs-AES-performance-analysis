@@ -30,10 +30,32 @@ app.set("view engine", "ejs");
 // suport pentru layout-uri - implicit fișierul care reprezintă template-ul site-uluieste views/layout.ejs
 app.use(expressLayouts);
 
+// Generate RSA key pair
+const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
+  modulusLength: 2048, // Recommended key length
+  publicKeyEncoding: {
+    type: "spki", // Change from "pkcs1" to "spki"
+    format: "pem", // PEM format
+  },
+  privateKeyEncoding: {
+    type: "pkcs8", // PKCS#8 for the private key
+    format: "pem",
+  },
+});
+
 const accessAttempts = new Map();
 const maxAccessAttempts = 1;
 const durationBlocked = 10 * 1000;
+
+app.use(
+  session({
+    secret: "secret-key",
+    resave: false,
+    saveUninitialized: true,
+  })
+);
 app.use((req, res, next) => {
+  //Spam protection
   const internetprotol = req.ip;
 
   if (
@@ -48,23 +70,181 @@ app.use((req, res, next) => {
       accessAttempts.delete(internetprotol + "-blockTime");
     }
   }
+
+  // Initialize session variables
+
+  if (!req.session.sequenceNumber) {
+    req.session.sequenceNumber = 0; // Start sequence at 0
+  }
+  if (!req.session.aesKey) {
+    req.session.aesKey = null; // AES key to be set during key exchange
+  }
+
   res.locals.username = req.cookies.username;
   res.locals.session = req.session;
-  res.locals.layout = "layout";
+  res.locals.layout = "improvised_handshake";
 
   next();
 });
 
-app.use(
-  session({
-    secret: "secret-key",
-    resave: false,
-    saveUninitialized: true,
-  })
-);
+// Endpoint to send public key to the client
+app.get("/public-key", (req, res) => {
+  res.json({ publicKey });
+});
+
+// Endpoint to receive encrypted AES key from the client
+app.post("/exchange-key", (req, res) => {
+  const encryptedAESKey = Buffer.from(req.body.encryptedKey, "base64");
+  const decryptedAESKey = crypto.privateDecrypt(
+    {
+      key: privateKey, // Ensure this is the correct PKCS#8 private key
+      padding: crypto.constants.RSA_PKCS1_OAEP_PADDING, // Use OAEP padding
+      oaepHash: "sha256", // Match the hash algorithm used during encryption
+    },
+    encryptedAESKey
+  );
+  req.session.aesKey = decryptedAESKey.toString("hex"); // Store securely in session
+  res.sendStatus(200);
+});
+
+// Function to call the C++ encryption program
+function encryptAESWithCPP(data, key, aad, iv) {
+  return new Promise((resolve, reject) => {
+    // Convert inputs to Base64
+    const dataBase64 = Buffer.from(data).toString("base64");
+
+    const keyBase64 = Buffer.from(
+      Buffer.from(key).toString("hex"),
+      "utf-8"
+    ).toString("base64");
+
+    const aadBase64 = Buffer.from(aad).toString("base64");
+
+    const ivBase64 = Buffer.from(
+      Buffer.from(iv).toString("hex"),
+      "utf-8"
+    ).toString("base64");
+
+    // Execute the C++ program with parameters
+    const cppProcess = spawn("./criptarebase64aesgcm.exe");
+
+    let encryptedOutput = "";
+    let errorOutput = "";
+
+    // Capture the program's output
+    cppProcess.stdout.on("data", (chunk) => {
+      encryptedOutput += chunk.toString();
+    });
+
+    // Capture error output
+    cppProcess.stderr.on("data", (chunk) => {
+      errorOutput += chunk.toString();
+    });
+
+    // Handle process completion
+    cppProcess.on("close", (code) => {
+      if (code !== 0) {
+        reject(
+          new Error(
+            `Encryption program exited with code ${code}: ${errorOutput}`
+          )
+        );
+      } else {
+        // If the C++ program ran successfully, parse the output
+        let timeTakenSecond = 0;
+        let authTagCpp = "";
+        let encryptedmsg = "";
+
+        // Match for encryption time
+        const timeMatch = encryptedOutput.match(
+          /Encryption time: (\d+\.\d+) ms/
+        );
+        if (timeMatch && timeMatch[1]) {
+          timeTakenSecond = parseFloat(timeMatch[1]);
+        }
+
+        // Match for authentication tag
+        const tagMatch = encryptedOutput.match(
+          /Tag from the c\+\+ program: (.+)/
+        );
+        if (tagMatch && tagMatch[1]) {
+          authTagCpp = tagMatch[1].trim();
+        }
+
+        // Match for encrypted message
+        const enctextmatch = encryptedOutput.match(
+          /C:\s([\s\S]*?)\nTag from the c\+\+ program:/
+        );
+        if (enctextmatch && enctextmatch[1]) {
+          // Remove any unnecessary whitespace and concatenate lines
+          const hexString = enctextmatch[1].replace(/\s+/g, "");
+          // Convert the hex string to a Buffer
+          encryptedmsg = Buffer.from(hexString, "hex");
+        }
+
+        // Resolve with the parsed values
+        resolve({
+          encryptedmsg, // Encrypted message as a Buffer
+          authTagCpp, // Authentication tag
+          timeTakenSecond, // Encryption time in milliseconds
+        });
+      }
+    });
+
+    // Handle errors
+    cppProcess.on("error", (err) => {
+      reject(err);
+    });
+
+    // Write input to stdin of the C++ process
+    cppProcess.stdin.write(dataBase64 + "\n");
+    cppProcess.stdin.write(keyBase64 + "\n");
+    cppProcess.stdin.write(aadBase64 + "\n");
+    cppProcess.stdin.write(ivBase64 + "\n");
+    cppProcess.stdin.end();
+  });
+}
+
+app.get("/demo", async (req, res) => {
+  try {
+    const sequenceNumber = ++req.session.sequenceNumber; // Increment sequence
+    const iv = generateIV(sequenceNumber);
+
+    const aesKey = Buffer.from(req.session.aesKey, "hex");
+    const rawContent = "<h1>Welcome to the Secure Page!</h1>"; // Replace with dynamic content
+
+    // Additional authenticated data
+    const aad = "Optional AAD Content"; // Replace with actual AAD if needed
+
+    const { encryptedmsg, authTagCpp, timeTakenSecond } =
+      await encryptAESWithCPP(rawContent, aesKey, aad, iv);
+
+    // Convert data to Base64
+    const encryptedDataBase64 = Buffer.from(encryptedmsg).toString("base64");
+    const authTagBase64 = Buffer.from(authTagCpp, "utf-8").toString("base64"); // Convert hex tag to Base64
+    const aadBase64 = Buffer.from(aad).toString("base64");
+    const ivHex = iv.toString("hex"); // IV remains in hexadecimal
+
+    // Send encrypted data and additional info to the client
+    res.json({
+      encryptedData: encryptedDataBase64,
+      authTag: authTagBase64,
+      aad: aadBase64,
+      iv: ivHex, // IV in hexadecimal for decryption
+    });
+  } catch (err) {
+    console.error("Encryption failed:", err);
+    res.status(500).send("Encryption failed");
+  }
+});
+
+function generateIV(sequenceNumber) {
+  const ivBuffer = Buffer.alloc(16);
+  ivBuffer.writeUInt32BE(sequenceNumber, 12); // Last 4 bytes
+  return ivBuffer.toString("hex");
+}
 
 app.get("/", (req, res) => {
-  const encryptionMethod = req.query.encryptionMethod;
   const admin = req.cookies.admin === "true";
   db = new sqlite3.Database("cumparaturi.db", sqlite3.OPEN_READWRITE, (err) => {
     if (err) {
