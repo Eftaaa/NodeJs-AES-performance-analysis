@@ -120,10 +120,9 @@ function encryptAESWithCPP(data, key, aad, iv) {
 
     const aadBase64 = Buffer.from(aad).toString("base64");
 
-    const ivBase64 = Buffer.from(
-      Buffer.from(iv).toString("hex"),
-      "utf-8"
-    ).toString("base64");
+    const ivHex = Buffer.from(iv);
+
+    const ivBase64 = Buffer.from(ivHex, "hex").toString("base64");
 
     // Execute the C++ program with parameters
     const cppProcess = spawn("./criptarebase64aesgcm.exe");
@@ -209,12 +208,11 @@ app.get("/demo", async (req, res) => {
   try {
     const sequenceNumber = ++req.session.sequenceNumber; // Increment sequence
     const iv = generateIV(sequenceNumber);
-
     const aesKey = Buffer.from(req.session.aesKey, "hex");
     const rawContent = "<h1>Welcome to the Secure Page!</h1>"; // Replace with dynamic content
 
     // Additional authenticated data
-    const aad = "Optional AAD Content"; // Replace with actual AAD if needed
+    const aad = ""; // Replace with actual AAD if needed
 
     const { encryptedmsg, authTagCpp, timeTakenSecond } =
       await encryptAESWithCPP(rawContent, aesKey, aad, iv);
@@ -239,8 +237,10 @@ app.get("/demo", async (req, res) => {
 });
 
 function generateIV(sequenceNumber) {
-  const ivBuffer = Buffer.alloc(16);
-  ivBuffer.writeUInt32BE(sequenceNumber, 12); // Last 4 bytes
+  // Allocate a 12-byte buffer
+  const ivBuffer = Buffer.alloc(12);
+  // Write the sequence number into the last 4 bytes
+  ivBuffer.writeUInt32BE(sequenceNumber, 8); // Position it at offset 8
   return ivBuffer.toString("hex");
 }
 

@@ -19,7 +19,6 @@
 
           // Generate AES key and encrypt it
           aesKey = window.crypto.getRandomValues(new Uint8Array(32));
-
           const encryptedAESKey = await window.crypto.subtle.encrypt(
             { name: "RSA-OAEP" },
             await importPublicKey(publicKey),
@@ -92,11 +91,15 @@
           );
           dataWithTag.set(encryptedBuffer);
           dataWithTag.set(tagBuffer, encryptedBuffer.length);
-
           // Import AES key for decryption
+          console.log(encryptedData);
+          console.log(aesKey);
+          console.log(aad);
+          console.log(iv);
+          console.log(tag);
           const cryptoKey = await window.crypto.subtle.importKey(
             "raw",
-            keyBuffer,
+            aesKey,
             { name: "AES-GCM" },
             false,
             ["decrypt"]
@@ -110,16 +113,26 @@
               additionalData: aadBuffer,
               tagLength: 128, // Tag length in bits (16 bytes)
             },
+
             cryptoKey,
             dataWithTag
           );
-          console.log("Am ajuns aici");
+
           // Decode decrypted data to string
           const decoder = new TextDecoder();
           return decoder.decode(decrypted);
         } catch (error) {
-          console.error("Decryption failed:", error.message);
+          // Catching and logging errors for debugging
+          console.error("Decryption failed with error:", error.message);
           console.error("Detailed error:", error);
+
+          // Log the specific details to help identify the issue
+          console.error("AES Key:", aesKey);
+          console.error("IV:", iv);
+          console.error("AAD:", aad);
+          console.error("Encrypted Data:", encryptedData);
+          console.error("Tag:", tag);
+
           throw new Error("Decryption failed");
         }
       }
