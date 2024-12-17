@@ -82,10 +82,117 @@ app.use((req, res, next) => {
 
   res.locals.username = req.cookies.username;
   res.locals.session = req.session;
-  res.locals.layout = "improvised_handshake";
+  if (req.session.aesKey == null) {
+    res.locals.layout = "improvised_handshake";
+  } else {
+    res.locals.layout = "layout";
+  }
 
   next();
 });
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+// Middleware to encrypt all responses
+app.use((req, res, next) => {
+  if (!req.session.aesKey) {
+    console.log("AES key is not set. Skipping encryption.");
+    return next(); // Skip encryption and continue to the next middleware/route
+  }
+
+  const originalSend = res.send;
+
+  res.send = async function (data) {
+    try {
+      // Prevent recursive encryption
+      if (res.locals.isEncrypted) {
+        return originalSend.call(this, data);
+      }
+      await console.log("Original response data:", data);
+      const aesKey = Buffer.from(req.session.aesKey, "hex");
+      await console.log(aesKey);
+
+      const sequenceNumber = ++req.session.sequenceNumber || 1; // Increment or initialize
+      const iv = generateIV(sequenceNumber);
+
+      // Additional authenticated data
+      const aad = ""; // Use actual AAD if needed
+      // Encrypt data
+      const { encryptedmsg, authTagCpp } = await encryptAESWithCPP(
+        data,
+        aesKey,
+        aad,
+        iv
+      );
+
+      // Convert data to Base64
+      const encryptedDataBase64 = Buffer.from(encryptedmsg).toString("base64");
+      const authTagBase64 = Buffer.from(authTagCpp, "utf-8").toString("base64");
+      const aadBase64 = Buffer.from(aad).toString("base64");
+      const ivHex = iv.toString("hex");
+
+      // Mark the response as encrypted
+      res.locals.isEncrypted = true;
+
+      // Send encrypted response
+      originalSend.call(this, {
+        encryptedData: encryptedDataBase64,
+        authTag: authTagBase64,
+        aad: aadBase64,
+        iv: ivHex,
+      });
+    } catch (err) {
+      console.error("Response encryption failed:", err);
+      res.status(500).send("Response encryption failed");
+    }
+  };
+
+  next();
+});
+// app.use(async (req, res, next) => {
+//   if (!req.session.aesKey) {
+//     console.log("AES key is not set. Skipping decryption.");
+//     return next(); // Skip encryption and continue to the next middleware/route
+//   }
+//   // Skip decryption if there's nothing to decrypt
+//   if (
+//     !req.body ||
+//     !req.body.encryptedData ||
+//     !req.body.authTag ||
+//     !req.body.iv
+//   ) {
+//     console.log("No encrypted data found in the request. Skipping decryption.");
+//     return next();
+//   }
+//   try {
+//     const aesKey = Buffer.from(req.session.aesKey, "hex");
+
+//     const { encryptedData, authTag, aad, iv } = req.body;
+
+//     // Convert from Base64 to Buffers
+//     const encryptedDataBuffer = Buffer.from(encryptedData, "base64");
+//     const authTagBuffer = Buffer.from(authTag, "base64");
+//     const aadBuffer = Buffer.from(aad, "base64");
+//     const ivBuffer = Buffer.from(iv, "hex");
+
+//     // Decrypt data
+//     const rawData = await decryptAESWithCPP(
+//       encryptedDataBuffer,
+//       aesKey,
+//       aadBuffer,
+//       ivBuffer,
+//       authTagBuffer
+//     );
+
+//     // Replace body with decrypted data
+//     req.body = JSON.parse(rawData.toString("utf-8")); // Assuming JSON data
+
+//     next();
+//   } catch (err) {
+//     console.error("Request decryption failed:", err);
+//     res.status(400).send("Request decryption failed");
+//   }
+// });
 
 // Endpoint to send public key to the client
 app.get("/public-key", (req, res) => {
@@ -203,36 +310,111 @@ function encryptAESWithCPP(data, key, aad, iv) {
     cppProcess.stdin.end();
   });
 }
+// Function to call the C++ encryption program
+function decryptAESWithCPP(data, key, aad, iv, tag) {
+  return new Promise((resolve, reject) => {
+    // Convert inputs to Base64
+    const dataBase64 = Buffer.from(data).toString("base64");
+
+    const keyBase64 = Buffer.from(
+      Buffer.from(key).toString("hex"),
+      "utf-8"
+    ).toString("base64");
+
+    const aadBase64 = Buffer.from(aad).toString("base64");
+
+    const ivHex = Buffer.from(iv);
+
+    const ivBase64 = Buffer.from(ivHex, "hex").toString("base64");
+    const tagBase64 = Buffer.from(tag).toString("base64");
+    // Execute the C++ program with parameters
+    const cppProcess = spawn("./DEcriptarebase64aesgcm.exe");
+
+    let encryptedOutput = "";
+    let errorOutput = "";
+
+    // Capture the program's output
+    cppProcess.stdout.on("data", (chunk) => {
+      encryptedOutput += chunk.toString();
+    });
+
+    // Capture error output
+    cppProcess.stderr.on("data", (chunk) => {
+      errorOutput += chunk.toString();
+    });
+
+    // Handle process completion
+    cppProcess.on("close", (code) => {
+      if (code !== 0) {
+        reject(
+          new Error(
+            `Encryption program exited with code ${code}: ${errorOutput}`
+          )
+        );
+      } else {
+        // If the C++ program ran successfully, parse the output
+        let timeTakenSecond = 0;
+        let authTagCpp = "";
+        let encryptedmsg = "";
+
+        // Match for encryption time
+        const timeMatch = encryptedOutput.match(
+          /Encryption time: (\d+\.\d+) ms/
+        );
+        if (timeMatch && timeMatch[1]) {
+          timeTakenSecond = parseFloat(timeMatch[1]);
+        }
+
+        // Match for authentication tag
+        const tagMatch = encryptedOutput.match(
+          /Tag from the c\+\+ program: (.+)/
+        );
+        if (tagMatch && tagMatch[1]) {
+          authTagCpp = tagMatch[1].trim();
+        }
+
+        // Match for encrypted message
+        const enctextmatch = encryptedOutput.match(
+          /C:\s([\s\S]*?)\nTag from the c\+\+ program:/
+        );
+        if (enctextmatch && enctextmatch[1]) {
+          // Remove any unnecessary whitespace and concatenate lines
+          const hexString = enctextmatch[1].replace(/\s+/g, "");
+          // Convert the hex string to a Buffer
+          encryptedmsg = Buffer.from(hexString, "hex");
+        }
+
+        // Resolve with the parsed values
+        resolve({
+          encryptedmsg, // Encrypted message as a Buffer
+          authTagCpp, // Authentication tag
+          timeTakenSecond, // Encryption time in milliseconds
+        });
+      }
+    });
+
+    // Handle errors
+    cppProcess.on("error", (err) => {
+      reject(err);
+    });
+
+    // Write input to stdin of the C++ process
+    cppProcess.stdin.write(dataBase64 + "\n");
+    cppProcess.stdin.write(keyBase64 + "\n");
+    cppProcess.stdin.write(aadBase64 + "\n");
+    cppProcess.stdin.write(tagBase64 + "\n");
+    cppProcess.stdin.write(ivBase64 + "\n");
+    cppProcess.stdin.end();
+  });
+}
 
 app.get("/demo", async (req, res) => {
   try {
-    const sequenceNumber = ++req.session.sequenceNumber; // Increment sequence
-    const iv = generateIV(sequenceNumber);
-    const aesKey = Buffer.from(req.session.aesKey, "hex");
-    const rawContent = "<h1>Welcome to the Secure Page!</h1>"; // Replace with dynamic content
-
-    // Additional authenticated data
-    const aad = ""; // Replace with actual AAD if needed
-
-    const { encryptedmsg, authTagCpp, timeTakenSecond } =
-      await encryptAESWithCPP(rawContent, aesKey, aad, iv);
-
-    // Convert data to Base64
-    const encryptedDataBase64 = Buffer.from(encryptedmsg).toString("base64");
-    const authTagBase64 = Buffer.from(authTagCpp, "utf-8").toString("base64"); // Convert hex tag to Base64
-    const aadBase64 = Buffer.from(aad).toString("base64");
-    const ivHex = iv.toString("hex"); // IV remains in hexadecimal
-
-    // Send encrypted data and additional info to the client
-    res.json({
-      encryptedData: encryptedDataBase64,
-      authTag: authTagBase64,
-      aad: aadBase64,
-      iv: ivHex, // IV in hexadecimal for decryption
-    });
+    // Assuming that encryption is handled by middleware already
+    res.render("demo_page"); // Render the demo-page view without manually encrypting the content
   } catch (err) {
-    console.error("Encryption failed:", err);
-    res.status(500).send("Encryption failed");
+    console.error("Error rendering demo page:", err);
+    res.status(500).send("Error rendering demo page");
   }
 });
 
