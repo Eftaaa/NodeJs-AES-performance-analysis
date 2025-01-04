@@ -1,15 +1,83 @@
 <h1>Inregistrare</h1>
-<form action="/inregistrare" method="POST">
-  <div>
-    <label for="username">Username:</label>
-    <input type="text" id="username" name="username" required>
-  </div>
-  <div>
-    <label for="password">Password:</label>
-    <input type="password" id="password" name="password" required>
-  </div>
+<form id="signinForm" method="POST" action="/inregistrare">
+  <label for="username">Username:</label>
+  <input type="text" id="username" name="username" required />
+
+  <label for="password">Password:</label>
+  <input type="password" id="password" name="password" required />
+
   <button type="submit">Sign Up</button>
+  <% if (errorMessage) { %>
+  <p style="color: red"><%= errorMessage %></p>
+  <% } %>
 </form>
-<% if (errorMessage) { %>
-  <p style="color: red;"><%= errorMessage %></p>
-<% } %>
+
+<script>
+  document
+    .getElementById("signinForm")
+    .addEventListener("submit", async function (event) {
+      event.preventDefault(); // Prevent the default form submission behavior
+
+      const form = event.target;
+      const formData = new FormData(form);
+
+      try {
+        // Convert form data to an object
+        const formObject = Object.fromEntries(formData.entries());
+        console.log("Submitting form data:", formObject);
+
+        // Send the POST request with the form data
+        const response = await fetch(form.action, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(formObject),
+        });
+
+        if (!response.ok) {
+          if (response.status === 500) {
+            document.getElementById("errorMessage").textContent =
+              "Registration failed. Please try again.";
+            return;
+          }
+          throw new Error("Form submission failed");
+        }
+
+        // Parse the encrypted response
+        const { encryptedData, authTag, aad, iv } = await response.json();
+
+        // Decrypt and handle the content
+        const decryptedData = await decryptData(
+          encryptedData,
+          aesKey,
+          iv,
+          aad,
+          authTag
+        );
+
+        console.log("Decrypted response data:", decryptedData);
+
+        // If it's a redirect, handle it
+        const parsedData = JSON.parse(decryptedData);
+        if (parsedData.isRedirect) {
+          await loadEncryptedContent(parsedData.url);
+        } else {
+          document.querySelector("#content").innerHTML = parsedData.data;
+
+          // Execute any scripts in the new content
+          const scripts = doc.querySelectorAll("script");
+          scripts.forEach((script) => {
+            const newScript = document.createElement("script");
+            newScript.text = script.textContent;
+            document.body.appendChild(newScript);
+            document.body.removeChild(newScript);
+          });
+        }
+      } catch (error) {
+        console.error("Error handling form submission:", error);
+        document.getElementById("errorMessage").textContent =
+          "An error occurred. Please try again.";
+      }
+    });
+</script>

@@ -4,22 +4,31 @@
       <li><a href="/">Home</a></li>
       <li><a href="/chestionar">Chestionar</a></li>
       <% if (username == null) { %>
-        <li><a href="/autentificare">Login</a></li>
-      <% } %>
-      <% if (username != null && typeof admin !== 'undefined' && admin) { %>
-        <li><a href="/admin">Admin</a></li>
+      <li><a href="/autentificare">Login</a></li>
+      <% } %> <% if (username != null && typeof admin !== 'undefined' && admin)
+      { %>
+      <li><a href="/admin">Admin</a></li>
       <% } %>
     </ul>
-
   </nav>
 </head>
 <body>
-<a href="/vizualizare-cos" class="button">Vizualizare Cos</a>
-<div class="button-container">
-  <button onclick="window.location.href='/creare-bd'" id="create-db-btn" class="button">Creare BD</button>
-  <button onclick="window.location.href='/inserare-bd'"  id="load-db-btn" class="button">Încarcare BD</button>
-  
-   
+  <a href="/vizualizare-cos" class="button">Vizualizare Cos</a>
+  <div class="button-container">
+    <button
+      onclick="loadEncryptedContent('/creare-bd')"
+      id="create-db-btn"
+      class="button"
+    >
+      Creare BD
+    </button>
+    <button
+      onclick="loadEncryptedContent('/inserare-bd')"
+      id="load-db-btn"
+      class="button"
+    >
+      Încarcare BD
+    </button>
   </div>
   <h1>Product List</h1>
   <table>
@@ -28,23 +37,84 @@
       <th>Name</th>
       <th>Price</th>
       <% if (authenticated) { %>
-        <th>Action</th>
+      <script>
+        document
+          .querySelectorAll("form[action='/adaugare_cos']")
+          .forEach((form) => {
+            form.addEventListener("submit", async (event) => {
+              event.preventDefault(); // Prevent default form submission
+
+              const formData = new FormData(form);
+
+              try {
+                // Convert form data to an object
+                const formObject = Object.fromEntries(formData.entries());
+                console.log("Submitting form data:", formObject);
+
+                // Send the POST request
+                const response = await fetch(form.action, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify(formObject),
+                });
+
+                if (!response.ok) {
+                  throw new Error("Failed to submit form");
+                }
+
+                // Parse the encrypted response
+                const { encryptedData, authTag, aad, iv } =
+                  await response.json();
+
+                // Decrypt the response
+                const decryptedData = await decryptData(
+                  encryptedData,
+                  aesKey,
+                  iv,
+                  aad,
+                  authTag
+                );
+
+                const parsedData = JSON.parse(decryptedData);
+
+                if (parsedData.isRedirect) {
+                  // Handle redirect securely
+                  await loadEncryptedContent(parsedData.url);
+                  history.pushState(null, "", parsedData.url); // Update browser history
+                  showFloatingMessage(
+                    `Product was added successfully!`,
+                    "success"
+                  );
+                } else {
+                  alert("Product added to cart unsuccessfully!");
+                }
+              } catch (error) {
+                console.error("Error adding product to cart:", error);
+                alert("Failed to add product to cart. Please try again.");
+              }
+            });
+          });
+      </script>
+
+      <th>Action</th>
       <% } %>
     </tr>
     <% products.forEach(product => { %>
-      <tr>
-        <td><%= product.id %></td>
-        <td><%= product.nume %></td>
-        <td><%= product.pret %></td>
-        <% if (authenticated) { %>
-            <td>
-              <form method="POST" action="/adaugare_cos">
-                <input type="hidden" name="id" value="<%= product.id %>">
-                <button type="submit">Adaugă în coș</button>
-              </form>
-            </td>
-          <% } %>
-      </tr>
+    <tr>
+      <td><%= product.id %></td>
+      <td><%= product.nume %></td>
+      <td><%= product.pret %></td>
+      <% if (authenticated) { %>
+      <td>
+        <form method="POST" action="/adaugare_cos">
+          <input type="hidden" name="id" value="<%= product.id %>" />
+          <button type="submit">Adaugă în coș</button>
+        </form>
+      </td>
+      <% } %>
+    </tr>
     <% }); %>
   </table>
 </body>

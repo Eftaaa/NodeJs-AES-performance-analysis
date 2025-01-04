@@ -1,177 +1,259 @@
 <!DOCTYPE html>
-<html>
+<html id="content">
   <head>
     <title>Secure Layout</title>
   </head>
   <body>
     <div id="content">Loading...</div>
     <!-- Placeholder for encrypted content -->
-
-    <script>
-      let aesKey;
-
-      async function initializeSecureSession() {
-        try {
-          let sequenceNumber;
-          // Fetch RSA public key from server
-          const response = await fetch("/public-key");
-          const { publicKey } = await response.json();
-
-          // Generate AES key and encrypt it
-          aesKey = window.crypto.getRandomValues(new Uint8Array(32));
-          const encryptedAESKey = await window.crypto.subtle.encrypt(
-            { name: "RSA-OAEP" },
-            await importPublicKey(publicKey),
-            aesKey
-          );
-
-          // Send the encrypted AES key to the server
-          await fetch("/exchange-key", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              encryptedKey: btoa(
-                String.fromCharCode(...new Uint8Array(encryptedAESKey))
-              ),
-            }),
-          });
-
-          // After key exchange, load the main content
-          loadEncryptedContent();
-        } catch (error) {
-          document.getElementById("content").innerText =
-            "Failed to establish secure connection.";
-          console.error("Key exchange failed:", error);
-        }
-      }
-
-      function decodeHexTag(base64Tag) {
-        // Step 1: Decode the Base64 string into a regular string
-        const hexString = atob(base64Tag);
-
-        // Step 2: Split the string into hex values (space-separated)
-        const hexArray = hexString.split(" ");
-
-        // Step 3: Convert hex values to raw bytes
-        const byteArray = hexArray.map((hex) => parseInt(hex, 16));
-
-        // Step 4: Create a Uint8Array from the byte array
-        return new Uint8Array(byteArray);
-      }
-
-      async function decryptData(encryptedData, aesKey, iv, aad, tag) {
-        const base64ToUint8Array = (base64) => {
-          const binaryString = atob(base64);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-          return bytes;
-        };
-
-        const hexToUint8Array = (hex) => {
-          const bytes = [];
-          for (let i = 0; i < hex.length; i += 2) {
-            bytes.push(parseInt(hex.slice(i, i + 2), 16));
-          }
-          return new Uint8Array(bytes);
-        };
-
-        try {
-          // Convert inputs to Uint8Array
-          const keyBuffer = hexToUint8Array(aesKey);
-          const ivBuffer = hexToUint8Array(iv);
-          const aadBuffer = base64ToUint8Array(aad);
-          const encryptedBuffer = base64ToUint8Array(encryptedData);
-          const tagBuffer = decodeHexTag(tag);
-
-          // Combine encrypted data with the tag
-          const dataWithTag = new Uint8Array(
-            encryptedBuffer.length + tagBuffer.length
-          );
-          dataWithTag.set(encryptedBuffer);
-          dataWithTag.set(tagBuffer, encryptedBuffer.length);
-          // Import AES key for decryption
-          console.log(encryptedData);
-          console.log(aesKey);
-          console.log(aad);
-          console.log(iv);
-          console.log(tag);
-          const cryptoKey = await window.crypto.subtle.importKey(
-            "raw",
-            aesKey,
-            { name: "AES-GCM" },
-            false,
-            ["decrypt"]
-          );
-
-          // Decrypt using Web Crypto API
-          const decrypted = await window.crypto.subtle.decrypt(
-            {
-              name: "AES-GCM",
-              iv: ivBuffer,
-              additionalData: aadBuffer,
-              tagLength: 128, // Tag length in bits (16 bytes)
-            },
-
-            cryptoKey,
-            dataWithTag
-          );
-
-          // Decode decrypted data to string
-          const decoder = new TextDecoder();
-          return decoder.decode(decrypted);
-        } catch (error) {
-          // Catching and logging errors for debugging
-          console.error("Decryption failed with error:", error.message);
-          console.error("Detailed error:", error);
-
-          // Log the specific details to help identify the issue
-          console.error("AES Key:", aesKey);
-          console.error("IV:", iv);
-          console.error("AAD:", aad);
-          console.error("Encrypted Data:", encryptedData);
-          console.error("Tag:", tag);
-
-          throw new Error("Decryption failed");
-        }
-      }
-
-      async function loadEncryptedContent() {
-        const response = await fetch("/demo"); // Encrypted content route
-        const { encryptedData, authTag, aad, iv } = await response.json();
-        // Define AAD if needed; otherwise, use an empty string
-        // Decrypt the data
-
-        const decryptedData = await decryptData(
-          encryptedData,
-          aesKey,
-          iv,
-          aad,
-          authTag
-        );
-        document.getElementById("content").innerHTML = decryptedData; // Inject decrypted content
-      }
-
-      // Import public RSA key function (helper)
-      async function importPublicKey(pem) {
-        const binaryDer = window.atob(
-          pem.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "")
-        );
-        const binaryData = new Uint8Array(
-          [...binaryDer].map((c) => c.charCodeAt(0))
-        );
-        return await window.crypto.subtle.importKey(
-          "spki",
-          binaryData.buffer,
-          { name: "RSA-OAEP", hash: "SHA-256" },
-          true,
-          ["encrypt"]
-        );
-      }
-
-      // Start secure session on page load
-      document.addEventListener("DOMContentLoaded", initializeSecureSession);
-    </script>
   </body>
 </html>
+<script>
+  let aesKey;
+
+  async function initializeSecureSession() {
+    // Import public RSA key function (helper)
+    async function importPublicKey(pem) {
+      const binaryDer = window.atob(
+        pem.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "")
+      );
+      const binaryData = new Uint8Array(
+        [...binaryDer].map((c) => c.charCodeAt(0))
+      );
+      return await window.crypto.subtle.importKey(
+        "spki",
+        binaryData.buffer,
+        { name: "RSA-OAEP", hash: "SHA-256" },
+        true,
+        ["encrypt"]
+      );
+    }
+    try {
+      let sequenceNumber;
+      // Fetch RSA public key from server
+      const response = await fetch("/public-key");
+      const { publicKey } = await response.json();
+
+      // Generate AES key and encrypt it
+      aesKey = window.crypto.getRandomValues(new Uint8Array(32));
+      const encryptedAESKey = await window.crypto.subtle.encrypt(
+        { name: "RSA-OAEP" },
+        await importPublicKey(publicKey),
+        aesKey
+      );
+
+      // Send the encrypted AES key to the server
+      await fetch("/exchange-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          encryptedKey: btoa(
+            String.fromCharCode(...new Uint8Array(encryptedAESKey))
+          ),
+        }),
+      });
+
+      // After key exchange, load the main content
+      loadEncryptedContent("/");
+    } catch (error) {
+      document.getElementById("content").innerText =
+        "Failed to establish secure connection.";
+      console.error("Key exchange failed:", error);
+    }
+  }
+
+  function decodeHexTag(base64Tag) {
+    // Step 1: Decode the Base64 string into a regular string
+    const hexString = atob(base64Tag);
+
+    // Step 2: Split the string into hex values (space-separated)
+    const hexArray = hexString.split(" ");
+
+    // Step 3: Convert hex values to raw bytes
+    const byteArray = hexArray.map((hex) => parseInt(hex, 16));
+
+    // Step 4: Create a Uint8Array from the byte array
+    return new Uint8Array(byteArray);
+  }
+
+  async function decryptData(encryptedData, aesKey, iv, aad, tag) {
+    const base64ToUint8Array = (base64) => {
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      return bytes;
+    };
+
+    const hexToUint8Array = (hex) => {
+      const bytes = [];
+      for (let i = 0; i < hex.length; i += 2) {
+        bytes.push(parseInt(hex.slice(i, i + 2), 16));
+      }
+      return new Uint8Array(bytes);
+    };
+
+    try {
+      // Convert inputs to Uint8Array
+      const keyBuffer = hexToUint8Array(aesKey);
+      const ivBuffer = hexToUint8Array(iv);
+      const aadBuffer = base64ToUint8Array(aad);
+      const encryptedBuffer = base64ToUint8Array(encryptedData);
+      const tagBuffer = decodeHexTag(tag);
+
+      // Combine encrypted data with the tag
+      const dataWithTag = new Uint8Array(
+        encryptedBuffer.length + tagBuffer.length
+      );
+      dataWithTag.set(encryptedBuffer);
+      dataWithTag.set(tagBuffer, encryptedBuffer.length);
+      // Import AES key for decryption
+      console.log(encryptedData);
+      console.log(aesKey);
+      console.log(aad);
+      console.log(iv);
+      console.log(tag);
+      const cryptoKey = await window.crypto.subtle.importKey(
+        "raw",
+        aesKey,
+        { name: "AES-GCM" },
+        false,
+        ["decrypt"]
+      );
+
+      // Decrypt using Web Crypto API
+      const decrypted = await window.crypto.subtle.decrypt(
+        {
+          name: "AES-GCM",
+          iv: ivBuffer,
+          additionalData: aadBuffer,
+          tagLength: 128, // Tag length in bits (16 bytes)
+        },
+
+        cryptoKey,
+        dataWithTag
+      );
+
+      // Decode decrypted data to string
+      const decoder = new TextDecoder();
+      return decoder.decode(decrypted);
+    } catch (error) {
+      // Catching and logging errors for debugging
+      console.error("Decryption failed with error:", error.message);
+      console.error("Detailed error:", error);
+
+      // Log the specific details to help identify the issue
+      console.error("AES Key:", aesKey);
+      console.error("IV:", iv);
+      console.error("AAD:", aad);
+      console.error("Encrypted Data:", encryptedData);
+      console.error("Tag:", tag);
+
+      throw new Error("Decryption failed");
+    }
+  }
+
+  async function loadEncryptedContent(url) {
+    try {
+      console.log("Navigating to:", url);
+
+      // Fetch encrypted data from the server
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error("Failed to load encrypted content");
+      }
+
+      const { encryptedData, authTag, aad, iv } = await response.json();
+
+      // Decrypt the data
+      const decryptedData = await decryptData(
+        encryptedData,
+        aesKey,
+        iv,
+        aad,
+        authTag
+      );
+
+      // Parse decrypted JSON
+      const parsedecryptedData = JSON.parse(decryptedData);
+
+      if (parsedecryptedData.isRedirect) {
+        console.log("Parsed data:", url);
+        console.log("Redirecting to:", parsedecryptedData.url);
+        await loadEncryptedContent(parsedecryptedData.url); // Handle the redirect securely
+        history.pushState(null, "", parsedecryptedData.url); // Update browser history
+        return;
+      }
+
+      // Inject content as before
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(parsedecryptedData.data, "text/html");
+
+      const newContent = doc.querySelector("#content");
+      document.getElementById("content").innerHTML = newContent.innerHTML;
+
+      // Replace default navigation behavior for links
+      document.querySelectorAll("a").forEach((link) => {
+        link.addEventListener("click", async (event) => {
+          event.preventDefault();
+          const linkUrl = event.target.getAttribute("href");
+          if (linkUrl) {
+            await loadEncryptedContent(linkUrl);
+            history.pushState(null, "", linkUrl);
+          }
+        });
+      });
+
+      const scripts = doc.querySelectorAll("script");
+      scripts.forEach((script) => {
+        if (script.src) {
+          // External script
+          const newScript = document.createElement("script");
+          newScript.src = script.src;
+          newScript.defer = true; // Ensure it loads after parsing
+          newScript.onload = () => {
+            console.log(`${script.src} loaded successfully`);
+          };
+          newScript.onerror = () => {
+            console.error(`Failed to load script: ${script.src}`);
+          };
+          console.log(`Appending external script: ${script.src}`);
+          document.body.appendChild(newScript);
+        } else {
+          // Inline script
+          try {
+            const newScript = document.createElement("script");
+            newScript.text = script.textContent;
+            document.body.appendChild(newScript);
+            document.body.removeChild(newScript); // Safe to remove after execution
+          } catch (err) {
+            console.error(`Error executing inline script: ${err.message}`);
+          }
+        }
+      });
+
+      // Update page title
+      const newTitle = doc.querySelector("title")?.textContent;
+      if (newTitle) {
+        document.title = newTitle;
+      }
+    } catch (error) {
+      console.error("Error loading encrypted content:", error);
+      document.querySelector("#content").innerHTML =
+        "<p>Failed to load content. Please try again later.</p>";
+    }
+  }
+  // Handle browser navigation events
+  window.addEventListener("popstate", () => {
+    loadEncryptedContent(window.location.pathname);
+  });
+
+  window.addEventListener("beforeunload", (event) => {
+    // Notify the server to reset the session
+    navigator.sendBeacon("/reset-session");
+  });
+
+  // Start secure session on page load
+  document.addEventListener("DOMContentLoaded", initializeSecureSession);
+</script>

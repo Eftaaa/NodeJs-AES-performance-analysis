@@ -18,122 +18,286 @@
 <button id="startAnalysis">Start Analysis</button>
 
 <script>
-  document.getElementById("startAnalysis").addEventListener("click", () => {
-    // Hardcoded default values
-    const nodeMin = 65000;
-    const nodeMax = 5460000;
-    const nodeStep = 65000;
-    const cppMin = 0;
-    const cppMax = 130000;
-    const cppStep = 5000;
+  if(typeof isProgressUpdating === "undefined"){
+  var isProgressUpdating = false;
+  }
+  else{
+    isProgressUpdating =false;
+  }
+         document.getElementById("startAnalysis").addEventListener("click", async () => {
+           // Hardcoded default values
+           const nodeMin = 65000;
+           const nodeMax = 5460000;
+           const nodeStep = 65000;
+           const cppMin = 0;
+           const cppMax = 130000;
+           const cppStep = 5000;
 
-    document.getElementById("progressContainer").style.display = "block";
+           document.getElementById("progressContainer").style.display = "block";
+
+          // Check if progress update is already running
+  if (!isProgressUpdating) {
     startProgressUpdate();
-
-    fetch("/encrypt-performance-test", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        nodeMin: nodeMin,
-        nodeMax: nodeMax,
-        nodeStep: nodeStep,
-        cppMin: cppMin,
-        cppMax: cppMax,
-        cppStep: cppStep,
-      }),
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        if (data.message === "finished") {
-          alert("Encryption analysis is finished.");
-          window.location.reload(); // Reload the page to show updated chart
-        } else if (data.message === "error") {
-          alert("Encryption analysis finished with errors.");
-        } else if (data.message === "running") {
-          alert(
-            "Encryption analysis is already running. Please wait until it completes."
-          );
-        }
-      })
-      .catch((error) => {
-        console.error("Error running encryption performance test:", error);
-      });
-  });
-
-  function startProgressUpdate() {
-    progressInterval = setInterval(() => {
-      fetch("/encryption-progress")
-        .then((response) => response.json())
-        .then((data) => {
-          if (data.running) {
-            document.getElementById("progressBar").value = data.progress;
-            document.getElementById(
-              "progressText"
-            ).textContent = `${data.progress}%`;
-          } else {
-            clearInterval(progressInterval);
-            window.location.reload(); // Refresh the page to update the chart
-          }
-        })
-        .catch((error) => {
-          console.error("Error fetching progress:", error);
-        });
-    }, 1000); // Poll every 1 second
+    isProgressUpdating = true; // Set the flag to true
   }
 
-  <% if (dataAvailable) { %>
-    // Fetch the performance data passed from the server
-    const performanceData = <%- JSON.stringify(performanceData) %>;
+           try {
+             const response = await fetch("/encrypt-performance-test", {
+               method: "POST",
+               headers: {
+                 "Content-Type": "application/json",
+               },
+               body: JSON.stringify({
+                 nodeMin: nodeMin,
+                 nodeMax: nodeMax,
+                 nodeStep: nodeStep,
+                 cppMin: cppMin,
+                 cppMax: cppMax,
+                 cppStep: cppStep,
+               }),
+             });
 
-    // Prepare the data for Chart.js
-    const labels = performanceData.map((item) => item.char_length);
-    const nodejsTimes = performanceData.map(
-      (item) => item.nodejs_encryption_time
-    );
-    const cppTimes = performanceData.map((item) => item.cpp_encryption_time);
+             const data = await response.json();
 
-    // Render the chart
-    const ctx = document
-      .getElementById("encryptionTimeChart")
-      .getContext("2d");
-    new Chart(ctx, {
-      type: "line",
-      data: {
-        labels: labels,
-        datasets: [
-          {
-            label: "Node.js Encryption Time (ms)",
-            data: nodejsTimes,
-            borderColor: "rgba(75, 192, 192, 1)",
-            borderWidth: 1,
-          },
-          {
-            label: "C++ Encryption Time (ms)",
-            data: cppTimes,
-            borderColor: "rgba(192, 75, 75, 1)",
-            borderWidth: 1,
-          },
-        ],
-      },
-      options: {
-        scales: {
-          x: {
-            title: {
-              display: true,
-              text: "Character Length",
-            },
-          },
-          y: {
-            beginAtZero: true,
-            title: {
-              display: true,
-              text: "Encryption Time (ms)",
-            },
-          },
-        },
-      },
-    });
-  <% } %>
+             console.log("-------------Data-encrypt-performance-test----------");
+             console.log(data);
+             console.log("-------------Data-encrypt-performance-test----------");
+
+             const { encryptedData, authTag, aad, iv } = data;
+
+             // Decrypt the data
+             const decryptedData = await decryptData(
+               encryptedData,
+               aesKey,
+               iv,
+               aad,
+               authTag
+             );
+
+             // Convert the decrypted string into JSON
+             const parsedData = JSON.parse(decryptedData);
+             const realdata = JSON.parse(parsedData.data);
+
+
+    if (realdata.message === "finished") {
+      alert("Encryption analysis is finished.");
+      loadEncryptedContent("/encryption_analysis"); // Reload the page to show updated chart
+      clearInterval(progressInterval); // Stop progress updates
+      isProgressUpdating = false; // Reset the flag
+    } else if (realdata.message === "error") {
+      alert("Encryption analysis finished with errors.");
+      clearInterval(progressInterval); // Stop progress updates
+      isProgressUpdating = false; // Reset the flag
+    } else if (realdata.message === "running") {
+      alert(
+        "Encryption analysis is already running. Please wait until it completes."
+      );
+    }
+           } catch (error) {
+             console.error("Error running encryption performance test:", error);
+             clearInterval(progressInterval); // Stop progress updates
+             isProgressUpdating = false; // Reset the flag
+            }
+         });
+
+         function startProgressUpdate() {
+           progressInterval = setInterval(async () => {
+             try {
+               const response = await fetch("/encryption-progress");
+               const data = await response.json();
+
+               const { encryptedData, authTag, aad, iv } = data;
+
+               // Decrypt the data
+               const decryptedData = await decryptData(
+                 encryptedData,
+                 aesKey,
+                 iv,
+                 aad,
+                 authTag
+               );
+
+               // Convert the decrypted string into JSON
+               const parsedData = JSON.parse(decryptedData);
+               const realdata = JSON.parse(parsedData.data);
+
+               console.log("-------------Data-encryption-progress----------");
+               console.log(realdata);
+               console.log("-------------Data-encryption-progress----------");
+
+               if (realdata.running) {
+                 document.getElementById("progressBar").value = realdata.progress;
+                 document.getElementById(
+                   "progressText"
+                 ).textContent = `${realdata.progress}%`;
+               } else {
+                clearInterval(progressInterval); // Stop progress updates when done
+        isProgressUpdating = false; // Reset the flag
+               }
+             } catch (error) {
+              console.error("Error fetching progress:", error);
+      clearInterval(progressInterval); // Stop progress updates in case of error
+      isProgressUpdating = false; // Reset the flag
+             }
+           }, 1000); // Poll every 1 second
+         }
+
+
+               <%
+               console.log("Data available?:");
+
+     console.log(dataAvailable);
+     if (dataAvailable) { %>
+        // Fetch the performance data passed from the server
+        if (typeof performanceData === "undefined") {
+     var performanceData = <%- JSON.stringify(performanceData) %>;
+        // Prepare the data for Chart.js
+        let labels = performanceData.map((item) => item.char_length);
+        let nodejsTimes = performanceData.map(
+          (item) => item.nodejs_encryption_time
+        );
+        let cppTimes = performanceData.map((item) => item.cpp_encryption_time);
+         // Ensure Chart.js is loaded before rendering the chart
+         let loadChartScript = new Promise((resolve, reject) => {
+           let chartScript = document.createElement("script");
+           chartScript.src = "https://cdn.jsdelivr.net/npm/chart.js";
+           chartScript.onload = () => {
+             console.log("Chart.js loaded successfully");
+             resolve();
+           };
+           chartScript.onerror = () => {
+             reject(new Error("Failed to load Chart.js"));
+           };
+           document.body.appendChild(chartScript);
+         });
+         loadChartScript
+           .then(() => {
+             console.log("Rendering the chart...");
+             renderChart(); // Call your chart rendering function here
+           })
+           .catch((error) => {
+             console.error(error.message);
+           });
+         function renderChart() {
+            // Render the chart
+            const ctx = document
+                       .getElementById("encryptionTimeChart")
+                       .getContext("2d");
+                     new Chart(ctx, {
+                       type: "line",
+                       data: {
+                         labels: labels,
+                         datasets: [
+                           {
+                             label: "Node.js Encryption Time (ms)",
+                             data: nodejsTimes,
+                             borderColor: "rgba(75, 192, 192, 1)",
+                             borderWidth: 1,
+                           },
+                           {
+                             label: "C++ Encryption Time (ms)",
+                             data: cppTimes,
+                             borderColor: "rgba(192, 75, 75, 1)",
+                             borderWidth: 1,
+                           },
+                         ],
+                       },
+                       options: {
+                         scales: {
+                           x: {
+                             title: {
+                               display: true,
+                               text: "Character Length",
+                             },
+                           },
+                           y: {
+                             beginAtZero: true,
+                             title: {
+                               display: true,
+                               text: "Encryption Time (ms)",
+                             },
+                           },
+                         },
+                       },
+                     });
+           }
+   } else {
+     // Update performanceData with new values
+     performanceData = <%- JSON.stringify(performanceData) %>;
+  // Prepare the data for Chart.js
+   labels = performanceData.map((item) => item.char_length);
+         nodejsTimes = performanceData.map(
+          (item) => item.nodejs_encryption_time
+        );
+         cppTimes = performanceData.map((item) => item.cpp_encryption_time);
+         // Ensure Chart.js is loaded before rendering the chart
+          loadChartScript = new Promise((resolve, reject) => {
+            chartScript = document.createElement("script");
+           chartScript.src = "https://cdn.jsdelivr.net/npm/chart.js";
+           chartScript.onload = () => {
+             console.log("Chart.js loaded successfully");
+             resolve();
+           };
+           chartScript.onerror = () => {
+             reject(new Error("Failed to load Chart.js"));
+           };
+           document.body.appendChild(chartScript);
+         });
+         loadChartScript
+           .then(() => {
+             console.log("Rendering the chart...");
+             renderChart(); // Call your chart rendering function here
+           })
+           .catch((error) => {
+             console.error(error.message);
+           });
+         function renderChart() {
+            // Render the chart
+            const ctx = document
+                       .getElementById("encryptionTimeChart")
+                       .getContext("2d");
+                     new Chart(ctx, {
+                       type: "line",
+                       data: {
+                         labels: labels,
+                         datasets: [
+                           {
+                             label: "Node.js Encryption Time (ms)",
+                             data: nodejsTimes,
+                             borderColor: "rgba(75, 192, 192, 1)",
+                             borderWidth: 1,
+                           },
+                           {
+                             label: "C++ Encryption Time (ms)",
+                             data: cppTimes,
+                             borderColor: "rgba(192, 75, 75, 1)",
+                             borderWidth: 1,
+                           },
+                         ],
+                       },
+                       options: {
+                         scales: {
+                           x: {
+                             title: {
+                               display: true,
+                               text: "Character Length",
+                             },
+                           },
+                           y: {
+                             beginAtZero: true,
+                             title: {
+                               display: true,
+                               text: "Encryption Time (ms)",
+                             },
+                           },
+                         },
+                       },
+                     });
+           }
+
+
+   }
+
+
+        <% } %>
 </script>

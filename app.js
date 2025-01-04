@@ -93,22 +93,69 @@ app.use((req, res, next) => {
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+let redirectingflag = false;
+
 // Middleware to encrypt all responses
 app.use((req, res, next) => {
-  if (!req.session.aesKey) {
+  if (!req.session.aesKey || req.session.aesKey == null) {
     console.log("AES key is not set. Skipping encryption.");
     return next(); // Skip encryption and continue to the next middleware/route
   }
 
   const originalSend = res.send;
+  const originalRedirect = res.redirect; // Save the original redirect method
+  res.redirect = async function (url) {
+    try {
+      if (!req.session.aesKey) {
+        console.log("No AES key. Sending plain redirect.");
+        return originalRedirect.call(this, url);
+      }
 
+      const aesKey = Buffer.from(req.session.aesKey, "hex");
+      const sequenceNumber = ++req.session.sequenceNumber || 1;
+      const iv = generateIV(sequenceNumber);
+      const aad = ""; // Use actual AAD if needed
+
+      const redirectData = JSON.stringify({ isRedirect: true, url });
+
+      const { encryptedmsg, authTagCpp } = await encryptAESWithCPP(
+        redirectData,
+        aesKey,
+        aad,
+        iv
+      );
+
+      const encryptedDataBase64 = Buffer.from(encryptedmsg).toString("base64");
+      const authTagBase64 = Buffer.from(authTagCpp, "utf-8").toString("base64");
+      const aadBase64 = Buffer.from(aad).toString("base64");
+      const ivHex = iv.toString("hex");
+
+      res.locals.isEncrypted = true;
+
+      // Send encrypted redirect response
+      return originalSend.call(this, {
+        encryptedData: encryptedDataBase64,
+        authTag: authTagBase64,
+        aad: aadBase64,
+        iv: ivHex,
+      });
+    } catch (err) {
+      console.error("Redirect encryption failed:", err);
+      res.status(500).send("Redirect encryption failed");
+    }
+  };
   res.send = async function (data) {
     try {
       // Prevent recursive encryption
       if (res.locals.isEncrypted) {
         return originalSend.call(this, data);
       }
+
       await console.log("Original response data:", data);
+
+      const redirectData = JSON.stringify({ isRedirect: false, data });
+
       const aesKey = Buffer.from(req.session.aesKey, "hex");
       await console.log(aesKey);
 
@@ -119,7 +166,7 @@ app.use((req, res, next) => {
       const aad = ""; // Use actual AAD if needed
       // Encrypt data
       const { encryptedmsg, authTagCpp } = await encryptAESWithCPP(
-        data,
+        redirectData,
         aesKey,
         aad,
         iv
@@ -143,7 +190,8 @@ app.use((req, res, next) => {
       });
     } catch (err) {
       console.error("Response encryption failed:", err);
-      res.status(500).send("Response encryption failed");
+
+      return next();
     }
   };
 
@@ -408,16 +456,6 @@ function decryptAESWithCPP(data, key, aad, iv, tag) {
   });
 }
 
-app.get("/demo", async (req, res) => {
-  try {
-    // Assuming that encryption is handled by middleware already
-    res.render("demo_page"); // Render the demo-page view without manually encrypting the content
-  } catch (err) {
-    console.error("Error rendering demo page:", err);
-    res.status(500).send("Error rendering demo page");
-  }
-});
-
 function generateIV(sequenceNumber) {
   // Allocate a 12-byte buffer
   const ivBuffer = Buffer.alloc(12);
@@ -425,6 +463,19 @@ function generateIV(sequenceNumber) {
   ivBuffer.writeUInt32BE(sequenceNumber, 8); // Position it at offset 8
   return ivBuffer.toString("hex");
 }
+app.post("/reset-session", (req, res) => {
+  req.session.aesKey = null;
+  req.session.sequenceNumber = 0;
+  req.session.destroy((err) => {
+    if (err) {
+      console.error("Failed to save session:", err);
+      return res.status(500).send("Failed to reset session");
+    }
+    console.log("Session reset successfully");
+    res.sendStatus(200);
+  });
+  res.clearCookie("connect.sid");
+});
 
 app.get("/", (req, res) => {
   const admin = req.cookies.admin === "true";
@@ -1421,10 +1472,9 @@ app.post("/inregistrare", (req, res) => {
       console.error("Error saving user data:", err);
       return res.status(500).send("Internal Server Error");
     }
-
-    // Redirect to the login page after successful registration
-    res.redirect("/autentificare");
   });
+  // Redirect to the login page after successful registration
+  res.redirect("/autentificare");
 });
 
 app.get("/upload_file", (req, res) => {

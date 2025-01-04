@@ -1,5 +1,4 @@
-<!DOCTYPE html>
-<html>
+<html id="content">
   <head>
     <% var pageTitle='Chestionar online' %>
     <meta charset="utf-8" />
@@ -59,7 +58,7 @@
               .then((response) => {
                 if (response.status === 401) {
                   alert("You must be logged in to perform this action.");
-                  window.location.href = "/autentificare";
+                  loadEncryptedContent("/autentificare");
                 } else if (!response.ok) {
                   throw new Error("Error during encryption");
                 }
@@ -74,52 +73,103 @@
               });
           });
 
-        function fetchEncryptionStats() {
-          fetch("/encryption-stats")
-            .then((response) => {
-              if (!response.ok) {
-                throw new Error("Error fetching encryption statistics");
-              }
-              return response.json();
-            })
-            .then((data) => {
+        async function fetchEncryptionStats() {
+          try {
+            const response = await fetch("/encryption-stats");
+
+            // Check if the response indicates an unauthorized user
+            if (response.status === 401) {
               const statsDiv = document.getElementById("encryptionStats");
-              if (data.length === 0) {
-                statsDiv.innerHTML =
-                  "<p>No encryption statistics available.</p>";
-                return;
-              }
+              statsDiv.innerHTML =
+                "<p>You must be logged in to view encryption statistics.</p>";
+              return;
+            }
+            if (!response.ok) {
+              throw new Error("Error fetching encryption statistics");
+            }
 
-              const table = document.createElement("table");
-              table.innerHTML = `
-                <tr>
-                  <th>Node.Js Encryption Time (ms)</th>
-                  <th>C++ Encryption Time (ms)</th>
-                  <th>Timestamp</th>
-                  <th>Name</th>
-                </tr>
-              `;
+            const data = await response.json();
+            const { encryptedData, authTag, aad, iv } = data;
 
-              data.forEach((row) => {
-                const tr = document.createElement("tr");
-                tr.innerHTML = `
-                  <td>${row.first_encryption_time}</td>
-                  <td>${row.second_encryption_time}</td>
-                  <td>${new Date(row.timestamp).toLocaleString()}</td>
-                    <td>${row.Name ? row.Name : ""}</td>
-                `;
-                table.appendChild(tr);
-              });
+            // Decrypt the data
+            const decryptedData = await decryptData(
+              encryptedData,
+              aesKey,
+              iv,
+              aad,
+              authTag
+            );
 
-              statsDiv.innerHTML = "";
-              statsDiv.appendChild(table);
-            })
-            .catch((error) => {
-              console.error("Error:", error);
+            // Convert the decrypted string into JSON
+            const parsedData = JSON.parse(decryptedData);
+            const realdata = JSON.parse(parsedData.data);
+
+            const statsDiv = document.getElementById("encryptionStats");
+            if (realdata.length === 0) {
+              statsDiv.innerHTML = "<p>No encryption statistics available.</p>";
+              return;
+            }
+
+            // Create and populate the table
+            const table = document.createElement("table");
+            table.innerHTML = `
+      <tr>
+        <th>Node.Js Encryption Time (ms)</th>
+        <th>C++ Encryption Time (ms)</th>
+        <th>Timestamp</th>
+        <th>Name</th>
+      </tr>
+    `;
+
+            realdata.forEach((row) => {
+              const tr = document.createElement("tr");
+              tr.innerHTML = `
+        <td>${row.first_encryption_time}</td>
+        <td>${row.second_encryption_time}</td>
+        <td>${new Date(row.timestamp).toLocaleString()}</td>
+        <td>${row.name ? row.name : ""}</td>
+      `;
+              table.appendChild(tr);
             });
+
+            statsDiv.innerHTML = "";
+            statsDiv.appendChild(table);
+          } catch (error) {
+            console.error("Error:", error);
+          }
         }
 
-        document.addEventListener("DOMContentLoaded", fetchEncryptionStats);
+        fetchEncryptionStats();
+      </script>
+      <div id="floatingMessage" class="hidden">
+        <span id="messageIcon"></span>
+        <span id="messageText"></span>
+      </div>
+      <script>
+        function showFloatingMessage(message, type = "success") {
+          const floatingMessage = document.getElementById("floatingMessage");
+          const messageText = document.getElementById("messageText");
+          const messageIcon = document.getElementById("messageIcon");
+
+          // Remove existing type classes
+          floatingMessage.className = "";
+          messageIcon.className = "";
+
+          // Add new type class
+          floatingMessage.classList.add(type);
+          messageIcon.classList.add(type);
+
+          // Update message text
+          messageText.textContent = message;
+
+          // Show the message
+          floatingMessage.classList.remove("hidden");
+
+          // Hide the message after 3 seconds
+          setTimeout(() => {
+            floatingMessage.classList.add("hidden");
+          }, 3000);
+        }
       </script>
     </main>
 

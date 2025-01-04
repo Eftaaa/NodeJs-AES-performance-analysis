@@ -6,7 +6,7 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background-image: url('../Images/background.jpg');
+  background-image: url("../Images/background.jpg");
   background-color: #f2f2f2; /* fallback color */
 }
 #continut {
@@ -24,8 +24,6 @@ h1 {
   color: #fff;
   margin: 0;
   padding: 20px;
-  
-  
 }
 
 iframe {
@@ -38,12 +36,11 @@ iframe {
   display: flex;
   justify-content: center;
   align-items: center;
- 
 }
 .button {
   display: inline-block;
   border-radius: 4px;
-  background-color: #4CAF50;
+  background-color: #4caf50;
   border: none;
   color: white;
   text-align: center;
@@ -127,7 +124,8 @@ nav a {
   display: block;
   text-align: center;
   padding: 14px 16px;
-  transition: color 0.5s ease-in-out, background-color 0.5s ease-in-out, border-radius 0.5s ease-in-out, padding 0.5s ease-in-out;
+  transition: color 0.5s ease-in-out, background-color 0.5s ease-in-out,
+    border-radius 0.5s ease-in-out, padding 0.5s ease-in-out;
 }
 
 nav a:hover {
@@ -208,8 +206,6 @@ tr:nth-child(even) {
   background-color: #f2f2f2;
 }
 
-
-
 label {
   display: block;
   margin-bottom: 10px;
@@ -258,14 +254,13 @@ input[type="checkbox"] {
   vertical-align: middle;
 }
 
-
 input[type="radio"] {
   transform: scale(0.8);
   vertical-align: middle;
 }
 
-
-label[for="username"], label[for="password"] {
+label[for="username"],
+label[for="password"] {
   font-size: 16px;
 }
 
@@ -280,8 +275,6 @@ input[type="password"] {
   margin-bottom: 20px;
 }
 
-
-
 input[type="file"] {
   margin-bottom: 10px;
 }
@@ -291,8 +284,7 @@ input[type="checkbox"] {
   margin-right: 10px;
 }
 
-.site-demo{
-
+.site-demo {
   width: 50%;
   margin: 0 auto;
   border: none;
@@ -333,7 +325,7 @@ input[type="checkbox"] {
   text-align: center; /* Center align text inside p elements */
 }
 
-.Statistici{
+.Statistici {
   width: 50%;
   margin: 20px auto;
   border: 50px;
@@ -344,87 +336,82 @@ input[type="checkbox"] {
   align-content: center;
 }
 form {
-
-
-form label {
-  display: block;
-  margin-bottom: 10px;
-  font-weight: bold;
-  color: #333;
-}
-
-form input[type="text"],
-form input[type="email"],
-form textarea {
-  width: 100%;
-  padding: 10px;
-  margin-bottom: 20px;
-  border-radius: 10px;
-  border: none;
-  background-color: #fff;
-  box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
-}
-
-form input[type="submit"] {
-  display: block;
-  width: 100%;
-  padding: 10px;
-  border-radius: 10px;
-  border: none;
-  background-color: #333;
-  color: #fff;
-  font-weight: bold;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
-}
-
-form input[type="submit"]:hover {
-  background-color: #666;
-}
-
-}
-  input[type="radio"] {
-    transform: scale(0.8);
-    vertical-align: middle;
-  }
-  
-  label[for="gender-male"], label[for="gender-female"], label[for="gender-other"] {
-    display: inline-block;
-    margin-right: 10px;
+  form label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: bold;
+    color: #333;
   }
 
-  table {
-    border: 3px solid black;
+  form input[type="text"],
+  form input[type="email"],
+  form textarea {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 20px;
+    border-radius: 10px;
+    border: none;
+    background-color: #fff;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
   }
-  
 
-  
-  h2 {
-    margin-top: 0;
-    
+  form input[type="submit"] {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    border-radius: 10px;
+    border: none;
+    background-color: #333;
+    color: #fff;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
   }
-  .video-container {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
+
+  form input[type="submit"]:hover {
+    background-color: #666;
+  }
+}
+input[type="radio"] {
+  transform: scale(0.8);
+  vertical-align: middle;
+}
+
+label[for="gender-male"],
+label[for="gender-female"],
+label[for="gender-other"] {
+  display: inline-block;
+  margin-right: 10px;
+}
+
+table {
+  border: 3px solid black;
+}
+
+h2 {
+  margin-top: 0;
+}
+.video-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .video-item {
-    margin: 10px;
+  margin: 10px;
 }
 
 .video-item:first-child {
-    flex-basis: 70%;
+  flex-basis: 70%;
 }
 
 .video-item:nth-child(2) {
-    flex-basis: 25%;
+  flex-basis: 25%;
 }
 
 .video-item:last-child {
-    flex-basis: 45%;
+  flex-basis: 45%;
 }
-
 
 @media print {
   @page {
@@ -433,7 +420,6 @@ form input[type="submit"]:hover {
   }
   body {
     font-size: 14px; /* or other font sizes */
-    
   }
   nav a {
     display: block;
@@ -450,4 +436,62 @@ form input[type="submit"]:hover {
   body {
     font-size: 14pt;
   }
+}
+#floatingMessage {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  border-radius: 5px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  font-size: 14px;
+  z-index: 1000;
+  transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+}
+
+#floatingMessage.hidden {
+  opacity: 0;
+  transform: translateY(20px);
+  pointer-events: none;
+}
+
+#floatingMessage.success {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+#floatingMessage.error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+#floatingMessage.info {
+  background-color: #d1ecf1;
+  color: #0c5460;
+  border: 1px solid #bee5eb;
+}
+
+#messageIcon {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+#messageIcon.success::before {
+  content: "✔";
+  color: #28a745;
+}
+
+#messageIcon.error::before {
+  content: "✘";
+  color: #dc3545;
+}
+
+#messageIcon.info::before {
+  content: "ℹ";
+  color: #17a2b8;
 }
