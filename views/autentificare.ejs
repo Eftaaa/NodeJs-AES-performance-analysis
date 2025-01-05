@@ -24,14 +24,56 @@
         // Convert form data to an object
         const formObject = Object.fromEntries(formData.entries());
         console.log("Submitting form data:", formObject);
+        const plaintext = JSON.stringify(formObject);
+        // Generate a random IV (12 bytes for AES-GCM)
+        const IV = crypto.getRandomValues(new Uint8Array(12));
 
-        // Send the POST request with the form data
+        // Encode the plaintext as a Uint8Array
+        const encoder = new TextEncoder();
+        const plaintextBytes = encoder.encode(plaintext);
+
+        // Import the raw key data into a CryptoKey object
+        const aesKeyData = await crypto.subtle.importKey(
+          "raw", // Raw key format
+          aesKey, // Raw key data
+          { name: "AES-GCM" }, // AES-GCM encryption algorithm
+          false, // The key is not extractable
+          ["encrypt", "decrypt"] // Key usage
+        );
+
+        // Encrypt the plaintext
+        const encryptedDataBuffer = await crypto.subtle.encrypt(
+          { name: "AES-GCM", iv: IV },
+          aesKeyData,
+          plaintextBytes
+        );
+
+        // Extract ciphertext and authentication tag from the encrypted buffer
+        const encryptedBytes = new Uint8Array(encryptedDataBuffer);
+        const ciphertext = encryptedBytes.slice(0, -16); // Ciphertext (everything except the last 16 bytes)
+        const tag = encryptedBytes.slice(-16); // Authentication tag (last 16 bytes)
+
+        // Convert ciphertext and tag to Base64
+        const ciphertextBase64 = btoa(String.fromCharCode(...ciphertext));
+        const tagBase64 = btoa(String.fromCharCode(...tag));
+        const ivBase64 = btoa(String.fromCharCode(...IV));
+
+        console.log("Sending encrypted data to server:", {
+          encryptedData: ciphertextBase64,
+          iv: ivBase64,
+          tag: tagBase64, // Send tag as Base64
+        });
+        // Send the encrypted data to the server
         const response = await fetch(form.action, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(formObject),
+          body: JSON.stringify({
+            encryptedData: ciphertextBase64,
+            iv: ivBase64,
+            tag: tagBase64,
+          }),
         });
 
         if (!response.ok) {

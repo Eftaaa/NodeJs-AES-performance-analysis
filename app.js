@@ -371,10 +371,11 @@ function decryptAESWithCPP(data, key, aad, iv, tag) {
 
     const aadBase64 = Buffer.from(aad).toString("base64");
 
-    const ivHex = Buffer.from(iv);
-
-    const ivBase64 = Buffer.from(ivHex, "hex").toString("base64");
+    const ivHex = Buffer.from(iv).toString("hex");
+    console.log("ivHex", ivHex);
+    const ivBase64 = Buffer.from(ivHex, "utf-8").toString("base64");
     const tagBase64 = Buffer.from(tag).toString("base64");
+
     // Execute the C++ program with parameters
     const cppProcess = spawn("./DEcriptarebase64aesgcm.exe");
 
@@ -401,30 +402,10 @@ function decryptAESWithCPP(data, key, aad, iv, tag) {
         );
       } else {
         // If the C++ program ran successfully, parse the output
-        let timeTakenSecond = 0;
-        let authTagCpp = "";
         let encryptedmsg = "";
 
-        // Match for encryption time
-        const timeMatch = encryptedOutput.match(
-          /Encryption time: (\d+\.\d+) ms/
-        );
-        if (timeMatch && timeMatch[1]) {
-          timeTakenSecond = parseFloat(timeMatch[1]);
-        }
-
-        // Match for authentication tag
-        const tagMatch = encryptedOutput.match(
-          /Tag from the c\+\+ program: (.+)/
-        );
-        if (tagMatch && tagMatch[1]) {
-          authTagCpp = tagMatch[1].trim();
-        }
-
         // Match for encrypted message
-        const enctextmatch = encryptedOutput.match(
-          /C:\s([\s\S]*?)\nTag from the c\+\+ program:/
-        );
+        const enctextmatch = encryptedOutput.match(/P:\s([\s\S]*)/);
         if (enctextmatch && enctextmatch[1]) {
           // Remove any unnecessary whitespace and concatenate lines
           const hexString = enctextmatch[1].replace(/\s+/g, "");
@@ -435,8 +416,6 @@ function decryptAESWithCPP(data, key, aad, iv, tag) {
         // Resolve with the parsed values
         resolve({
           encryptedmsg, // Encrypted message as a Buffer
-          authTagCpp, // Authentication tag
-          timeTakenSecond, // Encryption time in milliseconds
         });
       }
     });
@@ -1366,8 +1345,35 @@ const failedLoginAttemptsShortInterval = 3;
 // Map to store failed login attempts for each user
 const failedLoginAttempts = new Map();
 
-app.post("/verificare-autentificare", (req, res) => {
-  const { username, password } = req.body;
+app.post("/verificare-autentificare", async (req, res) => {
+  const { encryptedData, iv, tag } = req.body;
+
+  console.log("encryptedData: ", encryptedData);
+  console.log("iv: ", iv);
+  console.log("tag: ", tag);
+
+  if (!encryptedData || !iv || !tag) {
+    return res.status(400).json({ message: "Invalid encrypted input." });
+  }
+  const ciphertext = Buffer.from(encryptedData, "base64");
+  const ivBuffer = Buffer.from(iv, "base64");
+  const tagBuffer = Buffer.from(tag, "base64");
+  const aesKey = Buffer.from(req.session.aesKey, "hex");
+  console.log("ciphertext: ", ciphertext);
+  console.log("ivBuffer: ", ivBuffer);
+  console.log("tagBuffer: ", tagBuffer);
+  // Decrypt using C++ program
+  const decrypted = await decryptAESWithCPP(
+    ciphertext,
+    aesKey, // Ensure aesKey is stored in the session
+    "", // AAD (optional)
+    ivBuffer,
+    tagBuffer // Pass the authentication tag
+  );
+
+  const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
+  const decryptedMessageString = decryptedMessageBuffer.toString("utf-8"); // Convert Buffer to string
+  const { username, password } = JSON.parse(decryptedMessageString); // Parse JSON string
   const user = users.find(
     (user) => user.utilizator === username && user.parola === password
   );
@@ -1450,8 +1456,35 @@ app.post("/verificare-autentificare", (req, res) => {
 app.get("/inregistrare", (req, res) => {
   res.render("inregistrare", { errorMessage: null });
 });
-app.post("/inregistrare", (req, res) => {
-  const { username, password } = req.body;
+app.post("/inregistrare", async (req, res) => {
+  const { encryptedData, iv, tag } = req.body;
+
+  console.log("encryptedData: ", encryptedData);
+  console.log("iv: ", iv);
+  console.log("tag: ", tag);
+
+  if (!encryptedData || !iv || !tag) {
+    return res.status(400).json({ message: "Invalid encrypted input." });
+  }
+  const ciphertext = Buffer.from(encryptedData, "base64");
+  const ivBuffer = Buffer.from(iv, "base64");
+  const tagBuffer = Buffer.from(tag, "base64");
+  const aesKey = Buffer.from(req.session.aesKey, "hex");
+  console.log("ciphertext: ", ciphertext);
+  console.log("ivBuffer: ", ivBuffer);
+  console.log("tagBuffer: ", tagBuffer);
+  // Decrypt using C++ program
+  const decrypted = await decryptAESWithCPP(
+    ciphertext,
+    aesKey, // Ensure aesKey is stored in the session
+    "", // AAD (optional)
+    ivBuffer,
+    tagBuffer // Pass the authentication tag
+  );
+
+  const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
+  const decryptedMessageString = decryptedMessageBuffer.toString("utf-8"); // Convert Buffer to string
+  const { username, password } = JSON.parse(decryptedMessageString); // Parse JSON string
 
   // Check if the username already exists
   const userExists = users.some((user) => user.utilizator === username);
