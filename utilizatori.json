@@ -1,12 +1,17 @@
 [
   {
-    "utilizator": "test",
-    "parola": "test",
+    "utilizator": "relu",
+    "parola": "$2b$10$ZR1K4GxFZxxxKXicght9zuUH4Z5OJ4hn/TUzd55St7rtorWHWNSeu",
     "admin": false
   },
   {
     "utilizator": "admin",
-    "parola": "admin",
+    "parola": "$2b$10$LjDVNuXN4uqNYXjSorDiCO3m1nq4BgxfPMpaqGYh9ZhWjUrYLKN1i",
     "admin": true
+  },
+  {
+    "utilizator": "test",
+    "parola": "$2b$10$LHJYWCmFDCEhXnPwBg5yCOYe5AuIpFS90/PV4.ugAub3mDNKGRDhu",
+    "admin": false
   }
 ]

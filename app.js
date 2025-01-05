@@ -9,6 +9,7 @@ const crypto = require("crypto");
 const multer = require("multer");
 const upload = multer({ dest: "uploads/" });
 const { spawn } = require("child_process");
+const bcrypt = require("bcrypt");
 const { exec } = require("child_process");
 var sqlite3 = require("sqlite3");
 var db;
@@ -1374,33 +1375,86 @@ app.post("/verificare-autentificare", async (req, res) => {
   const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
   const decryptedMessageString = decryptedMessageBuffer.toString("utf-8"); // Convert Buffer to string
   const { username, password } = JSON.parse(decryptedMessageString); // Parse JSON string
-  const user = users.find(
-    (user) => user.utilizator === username && user.parola === password
-  );
-  console.log("verificare-autentificare apelat");
+
+  const user = users.find((user) => user.utilizator === username);
+
   if (user) {
-    console.log("Logat");
+    const isMatch = await bcrypt.compare(password, user.parola); // Compare the password with the hashed password
 
-    // Reset failed login attempts for the user
-    failedLoginAttempts.delete(username);
-    failedLoginAttempts.delete(username + "-blockTime");
+    if (isMatch) {
+      console.log("Login successful!");
+      console.log("Logat");
 
-    // Store user session and set cookies
-    req.session.utilizator = user.utilizator;
-    req.session.nume = user.nume;
-    req.session.prenume = user.prenume;
-    res.cookie("username", user.utilizator);
+      // Reset failed login attempts for the user
+      failedLoginAttempts.delete(username);
+      failedLoginAttempts.delete(username + "-blockTime");
 
-    // Set admin status in session or cookie
-    if (user.admin) {
-      req.session.admin = true;
-      res.cookie("admin", "true");
+      // Store user session and set cookies
+      req.session.utilizator = user.utilizator;
+      req.session.nume = user.nume;
+      req.session.prenume = user.prenume;
+      res.cookie("username", user.utilizator);
+
+      // Set admin status in session or cookie
+      if (user.admin) {
+        req.session.admin = true;
+        res.cookie("admin", "true");
+      } else {
+        req.session.admin = false;
+        res.cookie("admin", "false");
+      }
+
+      res.redirect("/");
     } else {
-      req.session.admin = false;
-      res.cookie("admin", "false");
-    }
+      console.log("Nelogat");
+      // Increment failed login attempts for the user
+      let attempts = failedLoginAttempts.get(username) || 0;
+      attempts++;
+      failedLoginAttempts.set(username, attempts);
 
-    res.redirect("/");
+      // Check if the user exceeds the maximum number of failed login attempts
+      if (attempts >= failedLoginAttemptsShortInterval) {
+        failedLoginAttempts.set(username + "-blockTime", Date.now());
+        req.session.errorMessage =
+          "Accesul este blocat temporar. Încercați din nou mai târziu.";
+        res.cookie(
+          "mesajEroare",
+          "Accesul este blocat temporar. Încercați din nou mai târziu."
+        );
+        return res.redirect("/autentificare");
+      } else {
+        // Check if the user is currently blocked
+        const blockTime = failedLoginAttempts.get(username + "-blockTime");
+        if (blockTime) {
+          const currentTime = Date.now();
+          const blockDuration = 10000; // Block duration in milliseconds (e.g., 10 seconds)
+          const timeSinceBlock = currentTime - blockTime;
+          if (timeSinceBlock < blockDuration) {
+            const timeLeft = blockDuration - timeSinceBlock;
+            req.session.errorMessage = `Accesul este blocat temporar. Încercați din nou în ${Math.ceil(
+              timeLeft / 1000
+            )} secunde.`;
+            res.cookie(
+              "mesajEroare",
+              `Accesul este blocat temporar. Încercați din nou în ${Math.ceil(
+                timeLeft / 1000
+              )} secunde.`
+            );
+            return res.redirect("/autentificare");
+          } else {
+            // Reset failed login attempts if the block duration has passed
+            failedLoginAttempts.delete(username);
+            failedLoginAttempts.delete(username + "-blockTime");
+          }
+        }
+      }
+
+      req.session.errorMessage = "Nume de utilizator sau parolă greșite.";
+      res.cookie("mesajEroare", "Username sau parola gresita");
+      res.redirect("/autentificare");
+
+      console.log("Username sau parola gresita");
+    }
   } else {
     console.log("Nelogat");
     // Increment failed login attempts for the user
@@ -1494,9 +1548,15 @@ app.post("/inregistrare", async (req, res) => {
       errorMessage: "Username already exists. Please choose another one.",
     });
   }
-
+  // Hash the password
+  const saltRounds = 10; // Adjust the number of salt rounds as needed
+  const hashedPassword = await bcrypt.hash(password, saltRounds);
   // Add new user with admin set to false
-  const newUser = { utilizator: username, parola: password, admin: false };
+  const newUser = {
+    utilizator: username,
+    parola: hashedPassword,
+    admin: false,
+  };
   users.push(newUser);
 
   // Save the updated user list back to the file
