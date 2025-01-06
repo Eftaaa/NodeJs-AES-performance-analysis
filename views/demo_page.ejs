@@ -10,8 +10,12 @@
   </nav>
 </head>
 <body>
+  <% if (username != null) { %>
   <a href="/vizualizare-cos" class="button">Vizualizare Cos</a>
+  <% } %>
   <div class="button-container">
+    <% if (username != null && typeof admin !== 'undefined' && admin) { %>
+
     <button
       onclick="loadEncryptedContent('/creare-bd')"
       id="create-db-btn"
@@ -26,6 +30,7 @@
     >
       Încarcare BD
     </button>
+    <% } %>
   </div>
   <h1>Product List</h1>
   <table>
