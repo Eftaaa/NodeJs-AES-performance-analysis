@@ -3,10 +3,7 @@
     <ul>
       <li><a href="/">Home</a></li>
       <li><a href="/chestionar">Chestionar</a></li>
-      <% if (username == null) { %>
-      <li><a href="/autentificare">Login</a></li>
-      <% } %> <% if (username != null && typeof admin !== 'undefined' && admin)
-      { %>
+      <% if (username != null && typeof admin !== 'undefined' && admin) { %>
       <li><a href="/admin">Admin</a></li>
       <% } %>
     </ul>

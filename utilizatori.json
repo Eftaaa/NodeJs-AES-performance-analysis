@@ -13,5 +13,10 @@
     "utilizator": "test",
     "parola": "$2b$10$LHJYWCmFDCEhXnPwBg5yCOYe5AuIpFS90/PV4.ugAub3mDNKGRDhu",
     "admin": false
+  },
+  {
+    "utilizator": "sadasd",
+    "parola": "$2b$10$.N.Gu36pNQ5KuPTYLi40luXpkj9tu1/4VW7PuKOJOkQ58/RkdKXB6",
+    "admin": false
   }
 ]
