@@ -1,62 +1,156 @@
-<form action="/admin/adauga-produs" method="POST">
+<h1>Admin: Gestionare Produse</h1>
+
+<h2>Produse Curente</h2>
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Nume</th>
+      <th>Preț</th>
+      <th>Stoc</th>
+      <th>Acțiuni</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% products.forEach(product => { %>
+    <tr>
+      <td><%= product.id %></td>
+      <td><%= product.nume %></td>
+      <td><%= product.pret.toFixed(2) %></td>
+      <td>
+        <!-- Update Stock Form -->
+        <form action="/admin/update-stoc" method="POST" class="updateStockForm">
+          <input type="hidden" name="id" value="<%= product.id %>" />
+          <input
+            type="number"
+            name="stoc"
+            value="<%= product.stoc %>"
+            min="0"
+            required
+          />
+          <button type="submit">Actualizează Stoc</button>
+        </form>
+      </td>
+      <td>
+        <!-- Delete Product Form -->
+        <form
+          action="/admin/delete-produs"
+          method="POST"
+          class="deleteProductForm"
+        >
+          <input type="hidden" name="id" value="<%= product.id %>" />
+          <button type="submit">Șterge Produs</button>
+        </form>
+      </td>
+    </tr>
+    <% }); %>
+  </tbody>
+</table>
+
+<h2>Adaugă Produs Nou</h2>
+<form action="/admin/adauga-produs" method="POST" class="addProductForm">
   <label for="nume">Nume produs:</label>
   <input type="text" id="nume" name="nume" required /><br />
-  <label for="pret">Pret produs:</label>
+  <label for="pret">Preț produs:</label>
   <input type="number" id="pret" name="pret" step="0.01" required /><br />
+  <label for="stoc">Stoc:</label>
+  <input type="number" id="stoc" name="stoc" min="0" required /><br />
   <input type="submit" value="Adaugă produs" />
 </form>
 <script>
-  document
-    .querySelectorAll("form[action='/admin/adauga-produs']")
-    .forEach((form) => {
-      form.addEventListener("submit", async (event) => {
-        event.preventDefault(); // Prevent default form submission
+  document.querySelectorAll("form").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault(); // Prevent default form submission
 
-        const formData = new FormData(form);
+      const formData = new FormData(form);
 
-        try {
-          // Convert form data to an object
-          const formObject = Object.fromEntries(formData.entries());
-          console.log("Submitting form data:", formObject);
+      try {
+        // Convert form data to an object
+        const formObject = Object.fromEntries(formData.entries());
+        console.log("Submitting form data:", formObject);
+        const plaintext = JSON.stringify(formObject);
 
-          // Send the POST request
-          const response = await fetch(form.action, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(formObject),
-          });
+        // Generate a random IV (12 bytes for AES-GCM)
+        const IV = crypto.getRandomValues(new Uint8Array(12));
 
-          if (!response.ok) {
-            throw new Error("Failed to submit form");
-          }
+        // Encode the plaintext as a Uint8Array
+        const encoder = new TextEncoder();
+        const plaintextBytes = encoder.encode(plaintext);
 
-          // Parse the encrypted response
-          const { encryptedData, authTag, aad, iv } = await response.json();
+        // Import the raw key data into a CryptoKey object
+        const aesKeyData = await crypto.subtle.importKey(
+          "raw", // Raw key format
+          aesKey, // Raw key data
+          { name: "AES-GCM" }, // AES-GCM encryption algorithm
+          false, // The key is not extractable
+          ["encrypt", "decrypt"] // Key usage
+        );
 
-          // Decrypt the response
-          const decryptedData = await decryptData(
-            encryptedData,
-            aesKey,
-            iv,
-            aad,
-            authTag
-          );
+        // Encrypt the plaintext
+        const encryptedDataBuffer = await crypto.subtle.encrypt(
+          { name: "AES-GCM", iv: IV },
+          aesKeyData,
+          plaintextBytes
+        );
 
-          const parsedData = JSON.parse(decryptedData);
+        // Extract ciphertext and authentication tag from the encrypted buffer
+        const encryptedBytes = new Uint8Array(encryptedDataBuffer);
+        const ciphertext = encryptedBytes.slice(0, -16); // Ciphertext (everything except the last 16 bytes)
+        const tag = encryptedBytes.slice(-16); // Authentication tag (last 16 bytes)
 
-          if (parsedData.isRedirect) {
-            // Handle redirect securely
-            await loadEncryptedContent(parsedData.url);
-            history.pushState(null, "", parsedData.url); // Update browser history
-          } else {
-            alert("Product added to list successfully!");
-          }
-        } catch (error) {
-          console.error("Error adding product to list:", error);
-          alert("Failed to add product to list. Please try again.");
+        // Convert ciphertext and tag to Base64
+        const ciphertextBase64 = btoa(String.fromCharCode(...ciphertext));
+        const tagBase64 = btoa(String.fromCharCode(...tag));
+        const ivBase64 = btoa(String.fromCharCode(...IV));
+
+        console.log("Sending encrypted data to server:", {
+          encryptedData: ciphertextBase64,
+          iv: ivBase64,
+          tag: tagBase64, // Send tag as Base64
+        });
+
+        // Send the encrypted data to the server
+        const response = await fetch(form.action, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            encryptedData: ciphertextBase64,
+            iv: ivBase64,
+            tag: tagBase64,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Form submission failed");
         }
-      });
+
+        // Parse the encrypted response
+        const { encryptedData, authTag, aad, iv } = await response.json();
+
+        // Decrypt and handle the content
+        const decryptedData = await decryptData(
+          encryptedData,
+          aesKey,
+          iv,
+          aad,
+          authTag
+        );
+
+        console.log("Decrypted response data:", decryptedData);
+
+        const parsedData = JSON.parse(decryptedData);
+        if (parsedData.isRedirect) {
+          await loadEncryptedContent(parsedData.url);
+        } else {
+          await loadEncryptedContent("admin");
+          showFloatingMessage(parsedData.message, "success");
+        }
+      } catch (error) {
+        console.error("Error handling form submission:", error);
+        showFloatingMessage("An error occurred. Please try again.", "error");
+      }
     });
+  });
 </script>

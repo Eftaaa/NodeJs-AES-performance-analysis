@@ -153,7 +153,7 @@ app.use((req, res, next) => {
         return originalSend.call(this, data);
       }
 
-      await console.log("Original response data:", data);
+      //  await console.log("Original response data:", data);
 
       const redirectData = JSON.stringify({ isRedirect: false, data });
 
@@ -859,7 +859,12 @@ app.get("/creare-bd", (req, res) => {
   db.serialize(() => {
     // Create the 'produse' table if it doesn't exist
     db.run(
-      "CREATE TABLE IF NOT EXISTS produse (id INTEGER PRIMARY KEY AUTOINCREMENT, nume TEXT UNIQUE, pret REAL)",
+      `CREATE TABLE IF NOT EXISTS produse (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nume TEXT UNIQUE NOT NULL,
+        pret REAL NOT NULL,
+        stoc INTEGER NOT NULL CHECK(stoc >= 0)
+      )`,
       (err) => {
         if (err) throw err;
         console.log(
@@ -867,23 +872,25 @@ app.get("/creare-bd", (req, res) => {
         );
 
         const drinks = [
-          { id: 1, nume: "Cola", pret: 2.5 },
-          { id: 2, nume: "Limonadă", pret: 1.8 },
-          { id: 3, nume: "Suc de Portocale", pret: 3.2 },
-          { id: 4, nume: "Ceai Rece", pret: 2.0 },
-          { id: 5, nume: "Cafea", pret: 2.7 },
+          { id: 1, nume: "Cola", pret: 2.5, stoc: 10 },
+          { id: 2, nume: "Limonadă", pret: 1.8, stoc: 15 },
+          { id: 3, nume: "Suc de Portocale", pret: 3.2, stoc: 8 },
+          { id: 4, nume: "Ceai Rece", pret: 2.0, stoc: 12 },
+          { id: 5, nume: "Cafea", pret: 2.7, stoc: 20 },
         ];
 
         const insertQuery =
-          "INSERT OR IGNORE INTO produse (id, nume, pret) VALUES (?, ?, ?)";
+          "INSERT OR IGNORE INTO produse (id, nume, pret, stoc) VALUES (?, ?, ?, ?)";
         drinks.forEach((drink) => {
           db.run(
             insertQuery,
-            [drink.id, drink.nume, drink.pret],
+            [drink.id, drink.nume, drink.pret, drink.stoc],
             function (err) {
               if (err) throw err;
               if (this.changes > 0) {
-                console.log(`Băutură "${drink.nume}" adăugată cu succes.`);
+                console.log(
+                  `Băutură "${drink.nume}" cu stoc ${drink.stoc} adăugată cu succes.`
+                );
               } else {
                 console.log(`Băutură "${drink.nume}" deja există în tabel.`);
               }
@@ -891,6 +898,101 @@ app.get("/creare-bd", (req, res) => {
           );
         });
 
+        db.run(
+          `CREATE TABLE IF NOT EXISTS customers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL
+          )`,
+          (err) => {
+            if (err) throw err;
+            console.log(
+              'Tabela "customers" a fost creată cu succes sau deja există.'
+            );
+            // Insert users into the "customers" table
+            const insertUserQuery =
+              "INSERT OR IGNORE INTO customers (name) VALUES (?)";
+
+            users.forEach((user) => {
+              db.run(insertUserQuery, [user.utilizator], function (err) {
+                if (err) throw err;
+                if (this.changes > 0) {
+                  console.log(
+                    `Utilizator "${user.utilizator}" adăugat cu succes.`
+                  );
+                } else {
+                  console.log(
+                    `Utilizator "${user.utilizator}" deja există în tabel.`
+                  );
+                }
+              });
+            });
+          }
+        );
+
+        // Create the "cart" table
+        db.run(
+          `CREATE TABLE IF NOT EXISTS cart (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER NOT NULL,
+    FOREIGN KEY (customer_id) REFERENCES customers (id)
+  )`,
+          (err) => {
+            if (err) throw err;
+            console.log(
+              'Tabela "cart" a fost creată cu succes sau deja există.'
+            );
+          }
+        );
+
+        // Create the "CartItem" table
+        db.run(
+          `CREATE TABLE IF NOT EXISTS CartItem (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cart_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL CHECK(quantity > 0),
+    FOREIGN KEY (cart_id) REFERENCES cart (id),
+    FOREIGN KEY (product_id) REFERENCES produse (id)
+  )`,
+          (err) => {
+            if (err) throw err;
+            console.log(
+              'Tabela "CartItem" a fost creată cu succes sau deja există.'
+            );
+          }
+        );
+        // Create the "Order" table
+        db.run(
+          `CREATE TABLE IF NOT EXISTS Orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL,
+      FOREIGN KEY (customer_id) REFERENCES customers (id)
+    )`,
+          (err) => {
+            if (err) throw err;
+            console.log(
+              'Tabela "Orders" a fost creată cu succes sau deja există.'
+            );
+          }
+        );
+
+        // Create the "OrderItem" table
+        db.run(
+          `CREATE TABLE IF NOT EXISTS OrderItem (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      product_id INTEGER NOT NULL,
+      quantity INTEGER NOT NULL CHECK(quantity > 0),
+      FOREIGN KEY (order_id) REFERENCES Orders (id),
+      FOREIGN KEY (product_id) REFERENCES produse (id)
+    )`,
+          (err) => {
+            if (err) throw err;
+            console.log(
+              'Tabela "OrderItem" a fost creată cu succes sau deja există.'
+            );
+          }
+        );
         db.run(
           `CREATE TABLE IF NOT EXISTS encryption (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1281,53 +1383,490 @@ db = new sqlite3.Database("cumparaturi.db", (err) => {
   }
   console.log("Connected to the database.");
 });
+app.get("/vizualizare-comenzi", (req, res) => {
+  const username = req.cookies.username;
 
-app.post("/adaugare_cos", (req, res) => {
-  const productId = req.body.id;
-  // Fetch the product details from the database using the product ID
-  db.get("SELECT * FROM produse WHERE id = ?", [productId], (err, product) => {
-    if (err) throw err;
-    if (product) {
-      // Add the product object to the cart array
-      cart.push(product);
-      res.redirect("/"); // Redirect the user to the main page
-    } else {
-      res.status(404).send("Product not found."); // Send a response back to the client if the product doesn't exist
+  // Fetch the customer ID based on the username
+  db.get(
+    "SELECT id FROM customers WHERE name = ?",
+    [username],
+    (err, customer) => {
+      if (err) {
+        console.error("Error fetching customer:", err);
+        return res.status(500).send("Internal Server Error");
+      }
+
+      if (!customer) return res.status(404).send("Customer not found");
+
+      // Fetch orders and associated items for the customer
+      db.all(
+        `SELECT o.id AS order_id, oi.product_id, oi.quantity, p.nume AS product_name
+         FROM orders o
+         JOIN orderItem oi ON o.id = oi.order_id
+         JOIN produse p ON oi.product_id = p.id
+         WHERE o.customer_id = ?`,
+        [customer.id],
+        (err, rows) => {
+          if (err) {
+            console.error("Error fetching orders:", err);
+            return res.status(500).send("Internal Server Error");
+          }
+
+          // Group items by order ID
+          const orders = rows.reduce((acc, row) => {
+            const order = acc.find((o) => o.id === row.order_id);
+            if (order) {
+              order.items.push({
+                product_name: row.product_name,
+                quantity: row.quantity,
+              });
+            } else {
+              acc.push({
+                id: row.order_id,
+                items: [
+                  { product_name: row.product_name, quantity: row.quantity },
+                ],
+              });
+            }
+            return acc;
+          }, []);
+
+          res.render("vizualizare-comenzi", { orders });
+        }
+      );
     }
+  );
+});
+app.post("/sterge-comanda", async (req, res) => {
+  const { encryptedData, iv, tag } = req.body;
+
+  console.log("encryptedData: ", encryptedData);
+  console.log("iv: ", iv);
+  console.log("tag: ", tag);
+
+  if (!encryptedData || !iv || !tag) {
+    return res.status(400).json({ message: "Invalid encrypted input." });
+  }
+
+  const ciphertext = Buffer.from(encryptedData, "base64");
+  const ivBuffer = Buffer.from(iv, "base64");
+  const tagBuffer = Buffer.from(tag, "base64");
+  const aesKey = Buffer.from(req.session.aesKey, "hex");
+
+  // Decrypt using C++ program (same function as your login decryption)
+  const decrypted = await decryptAESWithCPP(
+    ciphertext,
+    aesKey, // Ensure aesKey is stored in the session
+    "", // AAD (optional)
+    ivBuffer,
+    tagBuffer // Pass the authentication tag
+  );
+
+  const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
+  const decryptedMessageString = decryptedMessageBuffer.toString("utf-8"); // Convert Buffer to string
+  const formData = JSON.parse(decryptedMessageString); // Parse the form data
+  const orderId = formData.order_id;
+  // Delete order items and the order itself
+  db.run("DELETE FROM orderItem WHERE order_id = ?", [orderId], (err) => {
+    if (err) {
+      console.error("Error deleting order items:", err);
+      return res.status(500).send("Internal Server Error");
+    }
+
+    db.run("DELETE FROM orders WHERE id = ?", [orderId], (err) => {
+      if (err) {
+        console.error("Error deleting order:", err);
+        return res.status(500).send("Internal Server Error");
+      }
+
+      res.redirect("/vizualizare-comenzi");
+    });
   });
 });
 
-app.get("/vizualizare-cos", (req, res) => {
-  // Retrieve the cart from the session or initialize an empty array
+app.post("/adaugare_cos", async (req, res) => {
+  const { encryptedData, iv, tag } = req.body;
 
-  // Define the calculateTotal function within the scope of the route handler
-  function calculateTotal(cart) {
-    let total = 0;
-    const quantityMap = {}; // Map to track the quantity of each product ID
+  console.log("encryptedData: ", encryptedData);
+  console.log("iv: ", iv);
+  console.log("tag: ", tag);
 
-    // Calculate the quantity for each product in the cart
-    cart.slice(0, cart.length - 1).forEach((product) => {
-      const productId = product.id;
-      quantityMap[productId] = (quantityMap[productId] || 0) + 1;
-    });
-
-    // Iterate over the quantity map to calculate the total
-    Object.keys(quantityMap).forEach((productId) => {
-      const product = cart.find((item) => item.id === parseInt(productId));
-      if (product) {
-        const price = parseFloat(product.pret); // Ensure price is a number
-        const quantity = quantityMap[productId];
-        if (!isNaN(price) && !isNaN(quantity)) {
-          total += price * quantity;
-        }
-      }
-    });
-
-    return total;
+  if (!encryptedData || !iv || !tag) {
+    return res.status(400).json({ message: "Invalid encrypted input." });
   }
 
-  const total = calculateTotal(cart);
-  res.render("vizualizare-cos", { cart: cart, total: total });
+  const ciphertext = Buffer.from(encryptedData, "base64");
+  const ivBuffer = Buffer.from(iv, "base64");
+  const tagBuffer = Buffer.from(tag, "base64");
+  const aesKey = Buffer.from(req.session.aesKey, "hex");
+
+  // Decrypt using C++ program (same function as your login decryption)
+  const decrypted = await decryptAESWithCPP(
+    ciphertext,
+    aesKey, // Ensure aesKey is stored in the session
+    "", // AAD (optional)
+    ivBuffer,
+    tagBuffer // Pass the authentication tag
+  );
+
+  const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
+  const decryptedMessageString = decryptedMessageBuffer.toString("utf-8"); // Convert Buffer to string
+  const formData = JSON.parse(decryptedMessageString); // Parse the form data
+  console.log("FormData: ", formData);
+
+  const productId = formData.id;
+  // Step 1: Get the customer_id from the customers table using the logged-in user's username
+  db.get(
+    "SELECT id FROM customers WHERE name = ?",
+    [req.cookies.username],
+    (err, customer) => {
+      if (err) throw err;
+
+      if (customer) {
+        // Step 2: Check if the user already has a cart
+        db.get(
+          "SELECT id FROM cart WHERE customer_id = ?",
+          [customer.id],
+          (err, cart) => {
+            if (err) throw err;
+
+            // If the user doesn't have a cart, create one
+            let cartId = cart ? cart.id : null;
+            if (!cartId) {
+              // Create a new cart for the customer
+              db.run(
+                "INSERT INTO cart (customer_id) VALUES (?)",
+                [customer.id],
+                function (err) {
+                  if (err) throw err;
+                  cartId = this.lastID; // Get the new cart id
+                  console.log("New cart created with ID:", cartId);
+                }
+              );
+            }
+
+            // Step 3: Fetch product details from the database
+            db.get(
+              "SELECT * FROM produse WHERE id = ?",
+              [productId],
+              (err, product) => {
+                if (err) throw err;
+
+                if (product) {
+                  // Step 4: Check if the product already exists in the cartItem table for the user's cart
+                  db.get(
+                    "SELECT * FROM cartItem WHERE cart_id = ? AND product_id = ?",
+                    [cartId, productId],
+                    (err, cartItem) => {
+                      if (err) throw err;
+
+                      if (cartItem) {
+                        // Step 5: If product exists, increase the quantity
+                        const newQuantity = cartItem.quantity + 1;
+                        if (newQuantity <= product.stoc) {
+                          db.run(
+                            "UPDATE cartItem SET quantity = ? WHERE id = ?",
+                            [newQuantity, cartItem.id],
+                            (err) => {
+                              if (err) throw err;
+                              console.log(
+                                `Updated quantity of ${product.nume} to ${newQuantity}`
+                              );
+                              res.redirect("/"); // Redirect to the main page
+                            }
+                          );
+                        } else {
+                          res.status(400).send("Not enough stock available."); // Error if quantity exceeds stock
+                        }
+                      } else {
+                        // Step 6: If product doesn't exist, add it to the cartItem table with quantity 1
+                        if (product.stoc >= 1) {
+                          db.run(
+                            "INSERT INTO cartItem (cart_id, product_id, quantity) VALUES (?, ?, ?)",
+                            [cartId, productId, 1],
+                            (err) => {
+                              if (err) throw err;
+                              console.log(`Added ${product.nume} to the cart.`);
+                              res.redirect("/"); // Redirect to the main page
+                            }
+                          );
+                        } else {
+                          res.status(400).send("Not enough stock available."); // Error if product is out of stock
+                        }
+                      }
+                    }
+                  );
+                } else {
+                  res.status(404).send("Product not found."); // Send a response back to the client if the product doesn't exist
+                }
+              }
+            );
+          }
+        );
+      } else {
+        res.status(404).send("Customer not found."); // Send a response back if the customer does not exist
+      }
+    }
+  );
+});
+app.post("/place-order", async (req, res) => {
+  const username = req.cookies.username; // Get the username from cookies
+  if (!username) {
+    return res
+      .status(401)
+      .json({ message: "You must be logged in to place an order." });
+  }
+
+  db.get(
+    "SELECT id FROM customers WHERE name = ?",
+    [username],
+    (err, customer) => {
+      if (err)
+        return res
+          .status(500)
+          .json({ message: "Database error. Error fining the customer" });
+      if (!customer)
+        return res.status(404).json({ message: "Customer not found." });
+
+      const customerId = customer.id;
+
+      // Check stock availability and move items
+      db.all(
+        `SELECT ci.product_id, ci.quantity, p.stoc 
+         FROM cartItem ci 
+         JOIN cart c ON ci.cart_id = c.id 
+         JOIN produse p ON ci.product_id = p.id 
+         WHERE c.customer_id = ?`,
+        [customerId],
+        (err, cartItems) => {
+          if (err)
+            return res.status(500).json({
+              message: "Database error. Error selecting the products  ",
+            });
+
+          const insufficientStock = cartItems.find(
+            (item) => item.quantity > item.stoc
+          );
+          if (insufficientStock) {
+            return res.status(400).json({
+              message: `Insufficient stock for product ID ${insufficientStock.product_id}.`,
+            });
+          }
+
+          // Insert into Orders table
+          db.run(
+            "INSERT INTO Orders (customer_id) VALUES (?)",
+            [customerId],
+            function (err) {
+              if (err)
+                return res.status(500).json({ message: "Database error." });
+
+              const orderId = this.lastID;
+
+              // Insert into OrderItem table
+              const orderItemQueries = cartItems.map(
+                (item) =>
+                  new Promise((resolve, reject) => {
+                    db.run(
+                      `INSERT INTO OrderItem (order_id, product_id, quantity) VALUES (?, ?, ?)`,
+                      [orderId, item.product_id, item.quantity],
+                      (err) => (err ? reject(err) : resolve())
+                    );
+                  })
+              );
+
+              // Update stock and clear cart
+              const stockUpdateQueries = cartItems.map(
+                (item) =>
+                  new Promise((resolve, reject) => {
+                    db.run(
+                      `UPDATE produse SET stoc = stoc - ? WHERE id = ?`,
+                      [item.quantity, item.product_id],
+                      (err) => (err ? reject(err) : resolve())
+                    );
+                  })
+              );
+
+              Promise.all([...orderItemQueries, ...stockUpdateQueries])
+                .then(() => {
+                  // Clear the cart
+                  db.run(
+                    `DELETE FROM cartItem WHERE cart_id IN (SELECT id FROM cart WHERE customer_id = ?)`,
+                    [customerId],
+                    (err) => {
+                      if (err)
+                        return res
+                          .status(500)
+                          .json({ message: "Error clearing cart." });
+                      res.json({ message: "Order placed successfully!" });
+                    }
+                  );
+                })
+                .catch(() => {
+                  res
+                    .status(500)
+                    .json({ message: "Error processing the order." });
+                });
+            }
+          );
+        }
+      );
+    }
+  );
+});
+app.post("/update-cart", async (req, res) => {
+  const { encryptedData, iv, tag } = req.body;
+
+  console.log("encryptedData: ", encryptedData);
+  console.log("iv: ", iv);
+  console.log("tag: ", tag);
+
+  if (!encryptedData || !iv || !tag) {
+    return res.status(400).json({ message: "Invalid encrypted input." });
+  }
+
+  const ciphertext = Buffer.from(encryptedData, "base64");
+  const ivBuffer = Buffer.from(iv, "base64");
+  const tagBuffer = Buffer.from(tag, "base64");
+  const aesKey = Buffer.from(req.session.aesKey, "hex");
+
+  // Decrypt using C++ program (same function as your login decryption)
+  const decrypted = await decryptAESWithCPP(
+    ciphertext,
+    aesKey, // Ensure aesKey is stored in the session
+    "", // AAD (optional)
+    ivBuffer,
+    tagBuffer // Pass the authentication tag
+  );
+
+  const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
+  const decryptedMessageString = decryptedMessageBuffer.toString("utf-8"); // Convert Buffer to string
+  const formData = JSON.parse(decryptedMessageString); // Parse the form data
+  console.log("decryptedMessageString: ", decryptedMessageString);
+  console.log("FormData: ", formData);
+  const username = req.cookies.username; // Get the username from the cookies
+
+  if (!username) {
+    return res.redirect("/login"); // If no user is logged in, redirect to login page
+  }
+
+  // Step 1: Get the customer_id using the username
+  db.get(
+    "SELECT id FROM customers WHERE name = ?",
+    [username],
+    (err, customer) => {
+      if (err) throw err;
+
+      if (customer) {
+        // Step 2: Update quantity or delete items
+        const updatePromises = [];
+        const deletePromises = [];
+
+        // Loop through all the request fields for updating quantity or deleting
+        Object.keys(formData).forEach((key) => {
+          const [action, productId] = key.split("_"); // Get the action (delete or quantity) and productId
+
+          if (action === "quantity") {
+            const quantity = parseInt(formData[key]);
+
+            // Check if the quantity is valid
+            if (!isNaN(quantity) && quantity > 0) {
+              // Use a promise to handle async updates
+              updatePromises.push(
+                new Promise((resolve, reject) => {
+                  db.run(
+                    `UPDATE cartItem 
+                 SET quantity = ? 
+                 WHERE cart_id IN (SELECT id FROM cart WHERE customer_id = ?) AND product_id = ?`,
+                    [quantity, customer.id, parseInt(productId)],
+                    (err) => {
+                      if (err) reject(err);
+                      else resolve();
+                    }
+                  );
+                })
+              );
+            }
+          } else if (action === "delete") {
+            // Use a promise to handle async deletions
+            deletePromises.push(
+              new Promise((resolve, reject) => {
+                db.run(
+                  `DELETE FROM cartItem 
+               WHERE cart_id IN (SELECT id FROM cart WHERE customer_id = ?) AND product_id = ?`,
+                  [customer.id, parseInt(productId)],
+                  (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                  }
+                );
+              })
+            );
+          }
+        });
+
+        // Execute all the update and delete promises
+        Promise.all([...updatePromises, ...deletePromises])
+          .then(() => {
+            // Redirect back to the cart page after updating the cart
+            res.redirect("/vizualizare-cos");
+          })
+          .catch((error) => {
+            console.error("Error updating cart:", error);
+            res.status(500).send("Failed to update the cart.");
+          });
+      } else {
+        res.status(404).send("Customer not found.");
+      }
+    }
+  );
+});
+app.get("/vizualizare-cos", (req, res) => {
+  const username = req.cookies.username; // Get the username from the cookies
+
+  if (!username) {
+    return res.redirect("/login"); // If no user is logged in, redirect to login page
+  }
+
+  // Step 1: Get the customer_id using the username
+  db.get(
+    "SELECT id FROM customers WHERE name = ?",
+    [username],
+    (err, customer) => {
+      if (err) throw err;
+
+      if (customer) {
+        // Step 2: Retrieve the cart items for the customer
+        db.all(
+          `SELECT ci.product_id, ci.quantity, p.nume, p.pret FROM cartItem ci
+         JOIN produse p ON ci.product_id = p.id
+         WHERE ci.cart_id IN (SELECT id FROM cart WHERE customer_id = ?)`,
+          [customer.id],
+          (err, cartItems) => {
+            if (err) throw err;
+
+            if (cartItems.length === 0) {
+              return res.render("vizualizare-cos", { cart: [], total: 0 });
+            }
+
+            // Step 3: Calculate the total
+            let total = 0;
+            cartItems.forEach((item) => {
+              total += item.pret * item.quantity;
+            });
+
+            // Step 4: Render the page with the cart items and total
+            res.render("vizualizare-cos", {
+              cart: cartItems,
+              total: total.toFixed(2),
+            });
+          }
+        );
+      } else {
+        res.status(404).send("Customer not found.");
+      }
+    }
+  );
 });
 app.get("/autentificare", (req, res) => {
   req.session.username = null;
@@ -1566,8 +2105,18 @@ app.post("/inregistrare", async (req, res) => {
       return res.status(500).send("Internal Server Error");
     }
   });
-  // Redirect to the login page after successful registration
-  res.redirect("/autentificare");
+  // Insert the new user into the customers table
+  db.run("INSERT INTO customers (name) VALUES (?)", [username], (err) => {
+    if (err) {
+      console.error("Error adding customer to the database:", err);
+      return res.status(500).send("Internal Server Error");
+    }
+
+    console.log("Customer added to database:", username);
+
+    // Redirect to the login page after successful registration
+    res.redirect("/autentificare");
+  });
 });
 
 app.get("/upload_file", (req, res) => {
@@ -1607,33 +2156,131 @@ app.post("/rezultat-chestionar", (req, res) => {
 
 app.get("/admin", (req, res) => {
   const admin = req.cookies.admin === "true";
-  db.serialize(() => {
-    // Fetch all products from the 'produse' table
-    db.all("SELECT * FROM produse", (err, rows) => {
-      if (err) throw err;
-      res.render("admin", {
-        products: rows,
-        username: req.cookies.username,
-        admin: admin,
-      });
-    });
-  });
-});
-app.post("/admin/adauga-produs", (req, res) => {
-  db = new sqlite3.Database("cumparaturi.db");
-  const { nume, pret } = req.body;
-
-  // Inserează produsul în baza de date
-  const insertQuery = "INSERT INTO produse (nume, pret) VALUES (?, ?)";
-  db.run(insertQuery, [nume, pret], function (err) {
+  db.all("SELECT * FROM produse", [], (err, products) => {
     if (err) {
       console.error(err);
-      res.redirect("/admin"); // Redirecționează înapoi la pagina de admin în caz de eroare
-      return;
+      return res.status(500).send("Internal Server Error");
     }
+    res.render("admin", { products });
+  });
+});
+app.post("/admin/adauga-produs", async (req, res) => {
+  const { encryptedData, iv, tag } = req.body;
 
-    console.log(`Produsul "${nume}" a fost adăugat cu succes.`);
-    res.redirect("/admin"); // Redirecționează înapoi la pagina de admin după adăugare
+  console.log("encryptedData: ", encryptedData);
+  console.log("iv: ", iv);
+  console.log("tag: ", tag);
+
+  if (!encryptedData || !iv || !tag) {
+    return res.status(400).json({ message: "Invalid encrypted input." });
+  }
+
+  const ciphertext = Buffer.from(encryptedData, "base64");
+  const ivBuffer = Buffer.from(iv, "base64");
+  const tagBuffer = Buffer.from(tag, "base64");
+  const aesKey = Buffer.from(req.session.aesKey, "hex");
+
+  // Decrypt using C++ program (same function as your login decryption)
+  const decrypted = await decryptAESWithCPP(
+    ciphertext,
+    aesKey, // Ensure aesKey is stored in the session
+    "", // AAD (optional)
+    ivBuffer,
+    tagBuffer // Pass the authentication tag
+  );
+
+  const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
+  const decryptedMessageString = decryptedMessageBuffer.toString("utf-8"); // Convert Buffer to string
+  const formData = JSON.parse(decryptedMessageString); // Parse the form data
+  console.log("FormData: ", formData);
+  const { nume, pret, stoc } = formData;
+
+  db.run(
+    "INSERT INTO produse (nume, pret, stoc) VALUES (?, ?, ?)",
+    [nume, pret, stoc],
+    (err) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).send("Internal Server Error");
+      }
+      res.json({ message: "Product added successfully!" });
+    }
+  );
+});
+app.post("/admin/update-stoc", async (req, res) => {
+  const { encryptedData, iv, tag } = req.body;
+
+  console.log("encryptedData: ", encryptedData);
+  console.log("iv: ", iv);
+  console.log("tag: ", tag);
+
+  if (!encryptedData || !iv || !tag) {
+    return res.status(400).json({ message: "Invalid encrypted input." });
+  }
+
+  const ciphertext = Buffer.from(encryptedData, "base64");
+  const ivBuffer = Buffer.from(iv, "base64");
+  const tagBuffer = Buffer.from(tag, "base64");
+  const aesKey = Buffer.from(req.session.aesKey, "hex");
+
+  // Decrypt using C++ program (same function as your login decryption)
+  const decrypted = await decryptAESWithCPP(
+    ciphertext,
+    aesKey, // Ensure aesKey is stored in the session
+    "", // AAD (optional)
+    ivBuffer,
+    tagBuffer // Pass the authentication tag
+  );
+
+  const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
+  const decryptedMessageString = decryptedMessageBuffer.toString("utf-8"); // Convert Buffer to string
+  const formData = JSON.parse(decryptedMessageString); // Parse the form data
+  const { id, stoc } = formData;
+
+  db.run("UPDATE produse SET stoc = ? WHERE id = ?", [stoc, id], (err) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).send("Internal Server Error");
+    }
+    res.json({ message: "Stock updated successfully!" });
+  });
+});
+app.post("/admin/delete-produs", async (req, res) => {
+  const { encryptedData, iv, tag } = req.body;
+
+  console.log("encryptedData: ", encryptedData);
+  console.log("iv: ", iv);
+  console.log("tag: ", tag);
+
+  if (!encryptedData || !iv || !tag) {
+    return res.status(400).json({ message: "Invalid encrypted input." });
+  }
+
+  const ciphertext = Buffer.from(encryptedData, "base64");
+  const ivBuffer = Buffer.from(iv, "base64");
+  const tagBuffer = Buffer.from(tag, "base64");
+  const aesKey = Buffer.from(req.session.aesKey, "hex");
+
+  // Decrypt using C++ program (same function as your login decryption)
+  const decrypted = await decryptAESWithCPP(
+    ciphertext,
+    aesKey, // Ensure aesKey is stored in the session
+    "", // AAD (optional)
+    ivBuffer,
+    tagBuffer // Pass the authentication tag
+  );
+
+  const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
+  const decryptedMessageString = decryptedMessageBuffer.toString("utf-8"); // Convert Buffer to string
+  const formData = JSON.parse(decryptedMessageString); // Parse the form data
+  const { id } = formData;
+
+  db.run("DELETE FROM produse WHERE id = ?", [id], (err) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).send("Internal Server Error");
+    }
+    res.json({ message: "Product deleted successfully!" });
   });
 });
 

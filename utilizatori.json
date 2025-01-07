@@ -18,5 +18,10 @@
     "utilizator": "sadasd",
     "parola": "$2b$10$.N.Gu36pNQ5KuPTYLi40luXpkj9tu1/4VW7PuKOJOkQ58/RkdKXB6",
     "admin": false
+  },
+  {
+    "utilizator": "mircea",
+    "parola": "$2b$10$f7.wbLA0K/2APKMp.k.5LeCB5LVGB7SyfVp7Y8aELSmet/yc9gMa.",
+    "admin": false
   }
 ]

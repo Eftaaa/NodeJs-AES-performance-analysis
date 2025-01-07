@@ -1,74 +1,48 @@
-<head>
-  <nav>
-    <ul>
-      <li><a href="/">Home</a></li>
-      <li><a href="/chestionar">Chestionar</a></li>
-      <% if (username != null && typeof admin !== 'undefined' && admin) { %>
-      <li><a href="/admin">Admin</a></li>
-      <% } %>
-    </ul>
-  </nav>
-</head>
-<body>
-  <% if (username != null) { %>
-  <a href="/vizualizare-cos" class="button">Vizualizare Cos</a>
-  <a href="/vizualizare-comenzi" class="button">Vizualizare Comenzi</a>
-  <% } %>
-  <div class="button-container">
-    <% if (username != null && typeof admin !== 'undefined' && admin) { %>
-
-    <button
-      onclick="loadEncryptedContent('/creare-bd')"
-      id="create-db-btn"
-      class="button"
-    >
-      Creare BD
-    </button>
-    <button
-      onclick="loadEncryptedContent('/inserare-bd')"
-      id="load-db-btn"
-      class="button"
-    >
-      Încarcare BD
-    </button>
-    <% } %>
-  </div>
-  <h1>Product List</h1>
-  <table>
+<h1>Comenzile Tale</h1>
+<% if (orders.length === 0) { %>
+<p>Nu ai plasat nicio comandă încă.</p>
+<% } else { %>
+<table>
+  <thead>
     <tr>
-      <th>ID</th>
-      <th>Name</th>
-      <th>Price</th>
-      <% if (authenticated) { %>
-      <th>Action</th>
-      <% } %>
+      <th>ID Comandă</th>
+      <th>Produse</th>
+      <th>Cantități</th>
+      <th>Acțiuni</th>
     </tr>
-    <% products.forEach(product => { %>
+  </thead>
+  <tbody>
+    <% orders.forEach(order => { %>
     <tr>
-      <td><%= product.id %></td>
-      <td><%= product.nume %></td>
-      <td><%= product.pret.toFixed(2) %></td>
-      <% if (authenticated) { %>
+      <td><%= order.id %></td>
       <td>
-        <% if (product.stoc > 0) { %>
-        <form method="POST" action="/adaugare_cos">
-          <input type="hidden" name="id" value="<%= product.id %>" />
-          <button type="submit">Adaugă în coș</button>
-        </form>
-        <% } else { %>
-        <span style="color: red">Produs indisponibil</span>
-        <% } %>
+        <% order.items.forEach(item => { %>
+        <p><%= item.product_name %></p>
+        <% }); %>
       </td>
-      <% } %>
+      <td>
+        <% order.items.forEach(item => { %>
+        <p><%= item.quantity %></p>
+        <% }); %>
+      </td>
+      <td>
+        <form action="/sterge-comanda" method="POST" id="deleteForm-<%= order.id %>"">
+          <input type="hidden" name="order_id" value="<%= order.id %>" />
+          <button type="submit" class="btn">Șterge Comanda</button>
+        </form>
+      </td>
     </tr>
     <% }); %>
-  </table>
-</body>
+  </tbody>
+</table>
+<% } %>
 <script>
-  document.querySelectorAll("form[action='/adaugare_cos']").forEach((form) => {
-    form.addEventListener("submit", async (event) => {
+  // Assuming `aesKey` is defined earlier in the script
+  document.querySelectorAll("form[id^='deleteForm-']").forEach((form) => {
+    form.addEventListener("submit", async function (event) {
       event.preventDefault(); // Prevent default form submission
 
+      const form = event.target;
       const formData = new FormData(form);
 
       try {
@@ -115,6 +89,7 @@
           iv: ivBase64,
           tag: tagBase64, // Send tag as Base64
         });
+
         // Send the encrypted data to the server
         const response = await fetch(form.action, {
           method: "POST",
@@ -128,10 +103,20 @@
           }),
         });
 
-        // Parse the server response
+        if (!response.ok) {
+          if (response.status === 401) {
+            document.getElementById("errorMessage").textContent =
+              "Authentication failed. Please try again.";
+            document.getElementById("errorMessage").style.display = "block";
+            return;
+          }
+          throw new Error("Form submission failed");
+        }
+
+        // Parse the encrypted response
         const { encryptedData, authTag, aad, iv } = await response.json();
 
-        // Decrypt the response
+        // Decrypt and handle the content
         const decryptedData = await decryptData(
           encryptedData,
           aesKey,
@@ -139,35 +124,31 @@
           aad,
           authTag
         );
-        console.log("Decrypted received data:", decryptedData);
 
-        // Parse decrypted data
+        console.log("Decrypted response data:", decryptedData);
+
+        // If it's a redirect, handle it
         const parsedData = JSON.parse(decryptedData);
-
         if (parsedData.isRedirect) {
-          // Handle redirect securely
+          // Redirect to a new page
           await loadEncryptedContent(parsedData.url);
-          history.pushState(null, "", parsedData.url); // Update browser history
-          showFloatingMessage(`Product was added successfully!`, "success");
         } else {
-          // Show error message if not redirected
-          showFloatingMessage(parsedData.data, "error");
+            document.querySelector("#content").innerHTML = parsedData.data;
+
+// Execute any scripts in the new content
+const scripts = doc.querySelectorAll("script");
+scripts.forEach((script) => {
+  const newScript = document.createElement("script");
+  newScript.text = script.textContent;
+  document.body.appendChild(newScript);
+  document.body.removeChild(newScript);
+});
         }
       } catch (error) {
-        console.error("Error adding product to cart:", error);
-
-        // Handle undefined decryptedData gracefully
-        if (error instanceof SyntaxError) {
-          showFloatingMessage(
-            "An unexpected error occurred. Please try again.",
-            "error"
-          );
-        } else {
-          showFloatingMessage(
-            "Failed to process the server response. Please try again.",
-            "error"
-          );
-        }
+        console.error("Error handling form submission:", error);
+        document.getElementById("errorMessage").textContent =
+          "An error occurred. Please try again.";
+        document.getElementById("errorMessage").style.display = "block";
       }
     });
   });
