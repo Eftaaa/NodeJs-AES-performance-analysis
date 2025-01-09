@@ -702,7 +702,7 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
   });
 });
 
-app.post("/encrypt", (req, res) => {
+app.post("/encrypt", async (req, res) => {
   const createTableQuery = `
       CREATE TABLE IF NOT EXISTS encryption (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -721,7 +721,37 @@ app.post("/encrypt", (req, res) => {
       return;
     }
   });
-  const { content } = req.body;
+
+  const { encryptedData, IV, tag } = req.body;
+
+  console.log("encryptedData: ", encryptedData);
+  console.log("iv: ", IV);
+  console.log("tag: ", tag);
+
+  if (!encryptedData || !IV || !tag) {
+    return res.status(400).json({ message: "Invalid encrypted input." });
+  }
+
+  const ciphertext = Buffer.from(encryptedData, "base64");
+  const ivBuffer = Buffer.from(IV, "base64");
+  const tagBuffer = Buffer.from(tag, "base64");
+  const aesKey = Buffer.from(req.session.aesKey, "hex");
+
+  // Decrypt using C++ program (same function as your login decryption)
+  const decrypted = await decryptAESWithCPP(
+    ciphertext,
+    aesKey, // Ensure aesKey is stored in the session
+    "", // AAD (optional)
+    ivBuffer,
+    tagBuffer // Pass the authentication tag
+  );
+
+  const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
+  const decryptedMessageString = decryptedMessageBuffer.toString("utf-8"); // Convert Buffer to string
+  const formData = JSON.parse(decryptedMessageString); // Parse the form data
+
+  const content = formData;
+  console.log(content);
 
   if (!content) {
     res.status(400).send("Content is missing");

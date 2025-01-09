@@ -45,32 +45,96 @@
       <script>
         document
           .getElementById("encryptButton")
-          .addEventListener("click", function () {
-            const siteDemoContent =
-              document.querySelector(".site-demo").innerHTML;
-            fetch("/encrypt", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ content: siteDemoContent }),
-            })
-              .then((response) => {
-                if (response.status === 401) {
-                  alert("You must be logged in to perform this action.");
-                  loadEncryptedContent("/autentificare");
-                } else if (!response.ok) {
-                  throw new Error("Error during encryption");
-                }
-                return response.text();
-              })
-              .then((data) => {
-                console.log("Success:", data);
-                fetchEncryptionStats();
-              })
-              .catch((error) => {
-                console.error("Error:", error);
+          .addEventListener("click", async function () {
+            try {
+              const siteDemoContent =
+                document.querySelector(".site-demo").innerHTML;
+              const plaintext = JSON.stringify(siteDemoContent);
+
+              // Generate a random IV (12 bytes for AES-GCM)
+              const IV = crypto.getRandomValues(new Uint8Array(12));
+
+              // Encode the plaintext as a Uint8Array
+              const encoder = new TextEncoder();
+              const plaintextBytes = encoder.encode(plaintext);
+
+              // Import the raw key data into a CryptoKey object
+              const aesKeyData = await crypto.subtle.importKey(
+                "raw", // Raw key format
+                aesKey, // Raw key data
+                { name: "AES-GCM" }, // AES-GCM encryption algorithm
+                false, // The key is not extractable
+                ["encrypt", "decrypt"] // Key usage
+              );
+
+              // Encrypt the plaintext
+              const encryptedDataBuffer = await crypto.subtle.encrypt(
+                { name: "AES-GCM", iv: IV },
+                aesKeyData,
+                plaintextBytes
+              );
+
+              // Extract ciphertext and authentication tag from the encrypted buffer
+              const encryptedBytes = new Uint8Array(encryptedDataBuffer);
+              const ciphertext = encryptedBytes.slice(0, -16); // Ciphertext (everything except the last 16 bytes)
+              const tag = encryptedBytes.slice(-16); // Authentication tag (last 16 bytes)
+
+              // Convert ciphertext and tag to Base64
+              const ciphertextBase64 = btoa(String.fromCharCode(...ciphertext));
+              const tagBase64 = btoa(String.fromCharCode(...tag));
+              const ivBase64 = btoa(String.fromCharCode(...IV));
+
+              console.log("Sending encrypted data to server:", {
+                encryptedData: ciphertextBase64,
+                iv: ivBase64,
+                tag: tagBase64, // Send tag as Base64
               });
+
+              // Send the encrypted data to the server
+              const response = await fetch("/encrypt", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  encryptedData: ciphertextBase64,
+                  IV: ivBase64,
+                  tag: tagBase64,
+                }),
+              });
+              console.log("S-a ajuns aici");
+              // Parse the server response
+              const { encryptedData, authTag, aad, iv } = await response.json();
+
+              // Decrypt the response
+              const decryptedData = await decryptData(
+                encryptedData,
+                aesKey,
+                iv,
+                aad,
+                authTag
+              );
+              console.log("Decrypted received data:", decryptedData);
+
+              // Parse decrypted data
+              const parsedData = JSON.parse(decryptedData);
+
+              if (response.status === 401) {
+                alert("You must be logged in to perform this action.");
+                loadEncryptedContent("/autentificare");
+                return;
+              } else if (!response.ok) {
+                throw new Error("Error during encryption");
+              }
+
+              const data = parsedData.data;
+              console.log("Success:", data);
+
+              // Fetch updated encryption stats
+              fetchEncryptionStats();
+            } catch (error) {
+              console.error("Error:", error);
+            }
           });
 
         async function fetchEncryptionStats() {
@@ -113,22 +177,22 @@
             // Create and populate the table
             const table = document.createElement("table");
             table.innerHTML = `
-      <tr>
-        <th>Node.Js Encryption Time (ms)</th>
-        <th>C++ Encryption Time (ms)</th>
-        <th>Timestamp</th>
-        <th>Name</th>
-      </tr>
-    `;
+          <tr>
+            <th>Node.Js Encryption Time (ms)</th>
+            <th>C++ Encryption Time (ms)</th>
+            <th>Timestamp</th>
+            <th>Name</th>
+          </tr>
+        `;
 
             realdata.forEach((row) => {
               const tr = document.createElement("tr");
               tr.innerHTML = `
-        <td>${row.first_encryption_time}</td>
-        <td>${row.second_encryption_time}</td>
-        <td>${new Date(row.timestamp).toLocaleString()}</td>
-        <td>${row.name ? row.name : ""}</td>
-      `;
+            <td>${row.first_encryption_time}</td>
+            <td>${row.second_encryption_time}</td>
+            <td>${new Date(row.timestamp).toLocaleString()}</td>
+            <td>${row.name ? row.name : ""}</td>
+          `;
               table.appendChild(tr);
             });
 
