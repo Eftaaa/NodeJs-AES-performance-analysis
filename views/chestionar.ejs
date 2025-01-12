@@ -80,7 +80,7 @@
           });
 
           // Execute any scripts in the new content
-          const scripts = doc.querySelectorAll("script");
+          const scripts = document.querySelectorAll("script");
           scripts.forEach((script) => {
             const newScript = document.createElement("script");
             newScript.text = script.textContent;

@@ -373,7 +373,6 @@ function decryptAESWithCPP(data, key, aad, iv, tag) {
     const aadBase64 = Buffer.from(aad).toString("base64");
 
     const ivHex = Buffer.from(iv).toString("hex");
-    console.log("ivHex", ivHex);
     const ivBase64 = Buffer.from(ivHex, "utf-8").toString("base64");
     const tagBase64 = Buffer.from(tag).toString("base64");
 
@@ -724,10 +723,6 @@ app.post("/encrypt", async (req, res) => {
 
   const { encryptedData, IV, tag } = req.body;
 
-  console.log("encryptedData: ", encryptedData);
-  console.log("iv: ", IV);
-  console.log("tag: ", tag);
-
   if (!encryptedData || !IV || !tag) {
     return res.status(400).json({ message: "Invalid encrypted input." });
   }
@@ -751,7 +746,6 @@ app.post("/encrypt", async (req, res) => {
   const formData = JSON.parse(decryptedMessageString); // Parse the form data
 
   const content = formData;
-  console.log(content);
 
   if (!content) {
     res.status(400).send("Content is missing");
@@ -778,8 +772,8 @@ app.post("/encrypt", async (req, res) => {
   const timeTakenFirst =
     (endFirstEncryption[0] * 1e9 + endFirstEncryption[1]) / 1e6; // time in milliseconds
 
-  console.log("First Encryption Auth Tag:", authTag);
-  console.log(`First Encryption Time taken: ${timeTakenFirst} ms`);
+  console.log("NodeJs Encryption Auth Tag:", authTag);
+  console.log(`NodeJs Encryption Time taken: ${timeTakenFirst} ms`);
 
   // Convert the hex string to a Buffer
   const keyBuffer = Buffer.from("feffe9928665731c6d6a8f9467308308", "utf-8");
@@ -849,8 +843,8 @@ app.post("/encrypt", async (req, res) => {
     if (tagMatch && tagMatch[1]) {
       authTagCpp = tagMatch[1].trim();
     }
-    console.log(`Second Encryption Auth Tag: ${authTagCpp}`);
-    console.log(`Second Encryption Time taken: ${timeTakenSecond} ms`);
+    console.log(`C++ Encryption Auth Tag: ${authTagCpp}`);
+    console.log(`C++ Encryption Time taken: ${timeTakenSecond} ms`);
 
     // Get the current local time
     const currentDate = new Date();
@@ -861,7 +855,6 @@ app.post("/encrypt", async (req, res) => {
       .replace("T", " ")
       .substring(0, 19);
 
-    // Save the encryption times to the database
     const insertQuery = `
       INSERT INTO encryption (username, first_encryption_time, second_encryption_time, timestamp) 
       VALUES (?, ?, ?, ?)`;
@@ -877,9 +870,51 @@ app.post("/encrypt", async (req, res) => {
         }
 
         console.log("Encryption times saved successfully.");
-        res
-          .status(200)
-          .send("Encryption successful and times saved to the database.");
+
+        // After inserting, check if there are more than 10 entries for the same username
+        const checkQuery = `
+          SELECT COUNT(*) AS count FROM encryption WHERE username = ?`;
+
+        db.get(checkQuery, [username], (err, row) => {
+          if (err) {
+            console.error("Error checking entry count:", err);
+            res.status(500).send("Error checking entry count.");
+            return;
+          }
+
+          if (row.count > 10) {
+            // If there are more than 10 entries, delete the oldest ones
+            const deleteQuery = `
+              DELETE FROM encryption WHERE id IN (
+                SELECT id FROM encryption WHERE username = ? ORDER BY timestamp ASC LIMIT ? OFFSET ?
+              )`;
+
+            const excessEntriesCount = row.count - 10;
+            db.run(
+              deleteQuery,
+              [username, excessEntriesCount, 0],
+              function (err) {
+                if (err) {
+                  console.error("Error deleting old entries:", err);
+                  res.status(500).send("Error deleting old entries.");
+                  return;
+                }
+
+                console.log("Old entries deleted successfully.");
+                res
+                  .status(200)
+                  .send(
+                    "Encryption successful, times saved, and old entries deleted."
+                  );
+              }
+            );
+          } else {
+            // No need to delete any entries
+            res
+              .status(200)
+              .send("Encryption successful and times saved to the database.");
+          }
+        });
       }
     );
   });
@@ -1063,11 +1098,6 @@ app.get("/creare-bd", (req, res) => {
 // Encryption analysis route
 app.get("/encryption_analysis", (req, res) => {
   const username = req.cookies.username;
-
-  // Ensure the user is authenticated
-  if (!username) {
-    return res.status(401).send("You must be logged in to access this data.");
-  }
 
   const createTableQuery = `
     CREATE TABLE IF NOT EXISTS encryption_performance (
@@ -2311,6 +2341,44 @@ app.post("/admin/delete-produs", async (req, res) => {
       return res.status(500).send("Internal Server Error");
     }
     res.json({ message: "Product deleted successfully!" });
+  });
+});
+app.post("/admin/update-pret", async (req, res) => {
+  const { encryptedData, iv, tag } = req.body;
+
+  console.log("encryptedData: ", encryptedData);
+  console.log("iv: ", iv);
+  console.log("tag: ", tag);
+
+  if (!encryptedData || !iv || !tag) {
+    return res.status(400).json({ message: "Invalid encrypted input." });
+  }
+
+  const ciphertext = Buffer.from(encryptedData, "base64");
+  const ivBuffer = Buffer.from(iv, "base64");
+  const tagBuffer = Buffer.from(tag, "base64");
+  const aesKey = Buffer.from(req.session.aesKey, "hex");
+
+  // Decrypt using C++ program (same function as your login decryption)
+  const decrypted = await decryptAESWithCPP(
+    ciphertext,
+    aesKey, // Ensure aesKey is stored in the session
+    "", // AAD (optional)
+    ivBuffer,
+    tagBuffer // Pass the authentication tag
+  );
+
+  const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
+  const decryptedMessageString = decryptedMessageBuffer.toString("utf-8"); // Convert Buffer to string
+  const formData = JSON.parse(decryptedMessageString); // Parse the form data
+  const { id, pret } = formData;
+
+  db.run("UPDATE produse SET pret = ? WHERE id = ?", [pret, id], (err) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).send("Internal Server Error");
+    }
+    res.json({ message: "Price updated successfully!" });
   });
 });
 

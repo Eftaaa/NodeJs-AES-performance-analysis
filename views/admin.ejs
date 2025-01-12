@@ -16,7 +16,21 @@
     <tr>
       <td><%= product.id %></td>
       <td><%= product.nume %></td>
-      <td><%= product.pret.toFixed(2) %></td>
+      <td>
+        <!-- Update Price Form -->
+        <form action="/admin/update-pret" method="POST" class="updatePriceForm">
+          <input type="hidden" name="id" value="<%= product.id %>" />
+          <input
+            type="number"
+            name="pret"
+            value="<%= product.pret.toFixed(2) %>"
+            step="0.01"
+            min="0"
+            required
+          />
+          <button type="submit">Actualizează Preț</button>
+        </form>
+      </td>
       <td>
         <!-- Update Stock Form -->
         <form action="/admin/update-stoc" method="POST" class="updateStockForm">

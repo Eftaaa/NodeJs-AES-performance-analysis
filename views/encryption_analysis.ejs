@@ -25,6 +25,13 @@
     isProgressUpdating =false;
   }
          document.getElementById("startAnalysis").addEventListener("click", async () => {
+
+          <% if (username == null) { %>
+
+          alert("You must be logged in to perform this action.");
+                loadEncryptedContent("/autentificare");
+                return;
+                <% } %>
            // Hardcoded default values
            const nodeMin = 65000;
            const nodeMax = 5460000;
