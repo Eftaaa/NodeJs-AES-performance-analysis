@@ -7,7 +7,7 @@ const session = require("express-session");
 const path = require("path");
 const crypto = require("crypto");
 const multer = require("multer");
-const upload = multer({ dest: "uploads/" });
+const upload = multer({ storage: multer.memoryStorage() });
 const { spawn } = require("child_process");
 const bcrypt = require("bcrypt");
 const { exec } = require("child_process");
@@ -541,9 +541,10 @@ app.get("/encryption-stats", (req, res) => {
   });
 });
 app.post("/upload-encrypt", upload.single("file"), (req, res) => {
-  const file = req.file;
+  const fileBuffer = req.file.buffer;
+  const fileName = req.file.originalname;
 
-  if (!file) {
+  if (!fileBuffer) {
     res.status(400).send("File is missing");
     return;
   }
@@ -554,7 +555,7 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
     return;
   }
 
-  const key = Buffer.from("feffe9928665731c6d6a8f9467308308", "hex");
+  const key = Buffer.from(req.session.aesKey, "hex");
   const iv = Buffer.alloc(12, 0);
   const aed = Buffer.from("", "utf-8");
 
@@ -563,7 +564,7 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
     const startFirstEncryption = process.hrtime();
     // Check if the Base64 encoded data exceeds the size limit
 
-    const cipher = crypto.createCipheriv("aes-128-gcm", key, iv);
+    const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
 
     let encrypted = cipher.update(file, "utf8", "hex");
     encrypted += cipher.final("hex");
@@ -576,11 +577,11 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
     console.log(`First Encryption Time taken: ${timeTakenFirst} ms`);
 
     // Convert the hex string to a Buffer
-    const keyBuffer = Buffer.from("feffe9928665731c6d6a8f9467308308", "utf-8");
-
+    const keyBuffer = Buffer.from(req.session.aesKey, "utf8");
     // Encode the Buffer to a Base64 string
 
     const keyBase64 = keyBuffer.toString("base64");
+
     const aedBase64 = aed.toString("base64");
     // Encode data, key, and AED using Base64
     const dataBase64 = Buffer.from(file).toString("base64");
@@ -633,6 +634,7 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
 
       console.log(`Second Encryption Auth Tag: ${authTagCpp}`);
       console.log(`Second Encryption Time taken: ${timeTakenSecond} ms`);
+      console.log(`Second Encryption Time taken: ${stdoutData} ms`);
 
       // Get the current local time
       const currentDate = new Date();
@@ -660,6 +662,40 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
             return;
           }
 
+          // After inserting, check if there are more than 10 entries for the same username
+          const checkQuery = `
+          SELECT COUNT(*) AS count FROM encryption WHERE username = ?`;
+
+          db.get(checkQuery, [username], (err, row) => {
+            if (err) {
+              console.error("Error checking entry count:", err);
+              res.status(500).send("Error checking entry count.");
+              return;
+            }
+
+            if (row.count > 10) {
+              // If there are more than 10 entries, delete the oldest ones
+              const deleteQuery = `
+              DELETE FROM encryption WHERE id IN (
+                SELECT id FROM encryption WHERE username = ? ORDER BY timestamp ASC LIMIT ? OFFSET ?
+              )`;
+
+              const excessEntriesCount = row.count - 10;
+              db.run(
+                deleteQuery,
+                [username, excessEntriesCount, 0],
+                function (err) {
+                  if (err) {
+                    console.error("Error deleting old entries:", err);
+                    res.status(500).send("Error deleting old entries.");
+                    return;
+                  }
+
+                  console.log("Old entries deleted successfully.");
+                }
+              );
+            }
+          });
           console.log("Encryption times saved successfully.");
           res.status(200).json({ success: true });
         }
@@ -667,16 +703,8 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
     });
   };
 
-  fs.readFile(file.path, (err, fileContent) => {
-    if (err) {
-      console.error("Error reading uploaded file:", err);
-      res.status(500).send("Error reading uploaded file");
-      fs.unlinkSync(file.path); // Clean up the uploaded file
-
-      return;
-    }
-    // Ensure the encryption table exists
-    const createTableQuery = `
+  // Ensure the encryption table exists
+  const createTableQuery = `
      CREATE TABLE IF NOT EXISTS encryption (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
        username TEXT,
@@ -687,18 +715,14 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
      )
    `;
 
-    db.run(createTableQuery, (err) => {
-      if (err) {
-        console.error("Error creating the encryption table:", err);
-        res.status(500).send("Error creating the encryption table.");
-        return;
-      }
-    });
-
-    handleEncryption(fileContent, file.originalname);
-
-    fs.unlinkSync(file.path); // Clean up the uploaded file
+  db.run(createTableQuery, (err) => {
+    if (err) {
+      console.error("Error creating the encryption table:", err);
+      res.status(500).send("Error creating the encryption table.");
+      return;
+    }
   });
+  handleEncryption(fileBuffer, fileName);
 });
 
 app.post("/encrypt", async (req, res) => {
@@ -757,14 +781,13 @@ app.post("/encrypt", async (req, res) => {
     res.status(401).send("You must be logged in to perform this action.");
     return;
   }
-
-  const key = Buffer.from("feffe9928665731c6d6a8f9467308308", "hex");
+  const key = Buffer.from(req.session.aesKey, "hex");
   const iv = Buffer.alloc(12, 0); // 12 zero bytes IV
   const aed = Buffer.from("", "utf-8");
 
   // First Encryption: AES-GCM in Node.js
   const startFirstEncryption = process.hrtime();
-  const cipher = crypto.createCipheriv("aes-128-gcm", key, iv);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
   let encrypted = cipher.update(content, "utf8", "hex");
   encrypted += cipher.final("hex");
   const authTag = cipher.getAuthTag().toString("hex");
@@ -776,7 +799,7 @@ app.post("/encrypt", async (req, res) => {
   console.log(`NodeJs Encryption Time taken: ${timeTakenFirst} ms`);
 
   // Convert the hex string to a Buffer
-  const keyBuffer = Buffer.from("feffe9928665731c6d6a8f9467308308", "utf-8");
+  const keyBuffer = Buffer.from(req.session.aesKey, "utf-8");
 
   // Encode the Buffer to a Base64 string
   // Encode data, key, and AED using Base64
@@ -1223,7 +1246,7 @@ app.post("/encrypt-performance-test", (req, res) => {
 
   userProgress[username] = { running: true, progress: 0 };
 
-  const key = Buffer.from("feffe9928665731c6d6a8f9467308308", "hex");
+  const key = Buffer.from(req.session.aesKey, "hex");
   const iv = Buffer.alloc(12, 0);
   const aed = Buffer.from("", "utf-8");
 
@@ -1253,35 +1276,29 @@ app.post("/encrypt-performance-test", (req, res) => {
         }
 
         const results = new Map();
-
         const performEncryption = (method, charLength) => {
           return new Promise((resolve, reject) => {
             const content = "A".repeat(charLength);
-
             if (method === "node") {
               try {
                 const start = process.hrtime();
-                const cipher = crypto.createCipheriv("aes-128-gcm", key, iv);
+                const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
                 cipher.update(content, "utf8", "hex");
                 cipher.final("hex");
                 const end = process.hrtime(start);
                 const timeTaken = (end[0] * 1e9 + end[1]) / 1e6;
-
                 const result = results.get(charLength) || {
                   user_id: username,
                   char_length: charLength,
                   nodejs_encryption_time: null,
                   cpp_encryption_time: null,
                 };
-
                 result.nodejs_encryption_time = timeTaken;
                 results.set(charLength, result);
-
                 userProgress[username].progress = (
                   (charLength / (nodeMax + cppMax)) *
                   100
                 ).toFixed(2);
-
                 resolve();
               } catch (err) {
                 console.log("Error during Node.js encryption:", err);
@@ -1294,42 +1311,33 @@ app.post("/encrypt-performance-test", (req, res) => {
                 cppProcess.stdin.write(
                   Buffer.from(content).toString("base64") + "\n"
                 );
-                const key2 = Buffer.from(
-                  "feffe9928665731c6d6a8f9467308308",
-                  "utf-8"
-                );
+                const key2 = Buffer.from(req.session.aesKey, "utf-8");
                 cppProcess.stdin.write(key2.toString("base64") + "\n");
                 cppProcess.stdin.write(aed.toString("base64") + "\n");
                 cppProcess.stdin.end();
-
                 let stdoutData = "";
                 cppProcess.stdout.on(
                   "data",
                   (data) => (stdoutData += data.toString())
                 );
-
                 cppProcess.on("close", (code) => {
                   activeCppProcesses--;
                   if (code !== 0) {
                     console.log("C++ process exited with code:", code);
                     return reject(new Error("C++ encryption error"));
                   }
-
                   const match = stdoutData.match(
                     /Encryption time: (\d+\.\d+) ms/
                   );
                   const timeTaken = match ? parseFloat(match[1]) : 0;
-
                   const result = results.get(charLength) || {
                     user_id: username,
                     char_length: charLength,
                     nodejs_encryption_time: null,
                     cpp_encryption_time: null,
                   };
-
                   result.cpp_encryption_time = timeTaken;
                   results.set(charLength, result);
-
                   // C++ progress calculation
                   userProgress[username].progress = (
                     ((charLength + nodeMax) / (nodeMax + cppMax)) *
@@ -1338,7 +1346,6 @@ app.post("/encrypt-performance-test", (req, res) => {
                   resolve();
                 });
               };
-
               const waitForSlot = () => {
                 if (activeCppProcesses < maxConcurrentCppProcesses) {
                   runCppProcess();
@@ -1346,23 +1353,18 @@ app.post("/encrypt-performance-test", (req, res) => {
                   setTimeout(waitForSlot, 100);
                 }
               };
-
               waitForSlot();
             }
           });
         };
-
         const startEncryptionTasks = async () => {
           const tasks = [];
-
           for (let i = nodeMin; i <= nodeMax; i += nodeStep) {
             tasks.push(performEncryption("node", i));
           }
-
           for (let i = cppMin; i <= cppMax; i += cppStep) {
             tasks.push(performEncryption("cpp", i));
           }
-
           try {
             await Promise.all(tasks);
             insertResultsIntoDatabase();
@@ -1371,13 +1373,11 @@ app.post("/encrypt-performance-test", (req, res) => {
             return sendResponse(500, "error");
           }
         };
-
         const insertResultsIntoDatabase = () => {
           const insertQuery = `
-            INSERT INTO encryption_performance (user_id, char_length, nodejs_encryption_time, cpp_encryption_time)
-            VALUES (?, ?, ?, ?)
-          `;
-
+      INSERT INTO encryption_performance (user_id, char_length, nodejs_encryption_time, cpp_encryption_time)
+      VALUES (?, ?, ?, ?)
+    `;
           db.serialize(() => {
             const stmt = db.prepare(insertQuery);
             for (const result of results.values()) {
@@ -1391,7 +1391,6 @@ app.post("/encrypt-performance-test", (req, res) => {
             stmt.finalize(() => sendResponse(200, "finished"));
           });
         };
-
         startEncryptionTasks();
       }
     );
