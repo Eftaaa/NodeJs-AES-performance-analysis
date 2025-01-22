@@ -18,7 +18,7 @@
       <td><%= item.nume %></td>
       <td><%= item.pret.toFixed(2) %></td>
       <td>
-        <!-- Quantity input field -->
+        
         <input
           type="number"
           name="quantity_<%= item.product_id %>"
@@ -29,7 +29,6 @@
       </td>
       <td><%= productTotalPrice.toFixed(2) %></td>
       <td>
-        <!-- Delete button -->
         <button
           type="button"
           class="delete-btn"
@@ -57,7 +56,6 @@
     .getElementById("placeOrderBtn")
     .addEventListener("click", async () => {
       try {
-        // Send encrypted request to place the order
         const response = await fetch("/place-order", {
           method: "POST",
           headers: {
@@ -65,7 +63,6 @@
           },
         });
 
-        // Parse the encrypted response
         const { encryptedData, authTag, aad, iv } = await response.json();
 
         // Decrypt and handle the content
@@ -167,6 +164,11 @@
               "Authentication failed. Please try again.";
             return;
           }
+          if (response.status === 500) {
+            document.getElementById("errorMessage").textContent =
+              "Peste limita stocului";
+            return;
+          }
           throw new Error("Form submission failed");
         }
 
@@ -212,13 +214,10 @@
       const productId = event.target.getAttribute("data-product-id");
 
       try {
-        // Prepare data to send
         const plaintext = JSON.stringify({ [`delete_${productId}`]: true });
 
-        // Generate a random IV (12 bytes for AES-GCM)
         const IV = crypto.getRandomValues(new Uint8Array(12));
 
-        // Encode the plaintext as a Uint8Array
         const encoder = new TextEncoder();
         const plaintextBytes = encoder.encode(plaintext);
 
@@ -231,19 +230,16 @@
           ["encrypt", "decrypt"]
         );
 
-        // Encrypt the plaintext
         const encryptedDataBuffer = await crypto.subtle.encrypt(
           { name: "AES-GCM", iv: IV },
           aesKeyData,
           plaintextBytes
         );
 
-        // Extract ciphertext and authentication tag from the encrypted buffer
         const encryptedBytes = new Uint8Array(encryptedDataBuffer);
         const ciphertext = encryptedBytes.slice(0, -16);
         const tag = encryptedBytes.slice(-16);
 
-        // Convert ciphertext and tag to Base64
         const ciphertextBase64 = btoa(String.fromCharCode(...ciphertext));
         const tagBase64 = btoa(String.fromCharCode(...tag));
         const ivBase64 = btoa(String.fromCharCode(...IV));
@@ -254,7 +250,6 @@
           tag: tagBase64,
         });
 
-        // Send the delete request to the server
         const response = await fetch("/update-cart", {
           method: "POST",
           headers: {
@@ -276,10 +271,8 @@
           throw new Error("Form submission failed");
         }
 
-        // Parse the encrypted response
         const { encryptedData, authTag, aad, iv } = await response.json();
 
-        // Decrypt and handle the content
         const decryptedData = await decryptData(
           encryptedData,
           aesKey,
@@ -290,7 +283,6 @@
 
         console.log("Decrypted response data:", decryptedData);
 
-        // If it's a redirect, handle it
         const parsedData = JSON.parse(decryptedData);
         if (parsedData.isRedirect) {
           await loadEncryptedContent(parsedData.url);

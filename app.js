@@ -1032,9 +1032,9 @@ app.get("/creare-bd", (req, res) => {
           }
         );
 
-        // Create the "CartItem" table
+        // Create the "cart_item" table
         db.run(
-          `CREATE TABLE IF NOT EXISTS CartItem (
+          `CREATE TABLE IF NOT EXISTS cart_item (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     cart_id INTEGER NOT NULL,
     product_id INTEGER NOT NULL,
@@ -1045,13 +1045,13 @@ app.get("/creare-bd", (req, res) => {
           (err) => {
             if (err) throw err;
             console.log(
-              'Tabela "CartItem" a fost creată cu succes sau deja există.'
+              'Tabela "cart_item" a fost creată cu succes sau deja există.'
             );
           }
         );
         // Create the "Order" table
         db.run(
-          `CREATE TABLE IF NOT EXISTS Orders (
+          `CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       customer_id INTEGER NOT NULL,
       FOREIGN KEY (customer_id) REFERENCES customers (id)
@@ -1059,25 +1059,25 @@ app.get("/creare-bd", (req, res) => {
           (err) => {
             if (err) throw err;
             console.log(
-              'Tabela "Orders" a fost creată cu succes sau deja există.'
+              'Tabela "orders" a fost creată cu succes sau deja există.'
             );
           }
         );
 
-        // Create the "OrderItem" table
+        // Create the "order_item" table
         db.run(
-          `CREATE TABLE IF NOT EXISTS OrderItem (
+          `CREATE TABLE IF NOT EXISTS order_item (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       order_id INTEGER NOT NULL,
       product_id INTEGER NOT NULL,
       quantity INTEGER NOT NULL CHECK(quantity > 0),
-      FOREIGN KEY (order_id) REFERENCES Orders (id),
+      FOREIGN KEY (order_id) REFERENCES orders (id),
       FOREIGN KEY (product_id) REFERENCES produse (id)
     )`,
           (err) => {
             if (err) throw err;
             console.log(
-              'Tabela "OrderItem" a fost creată cu succes sau deja există.'
+              'Tabela "order_item" a fost creată cu succes sau deja există.'
             );
           }
         );
@@ -1461,7 +1461,7 @@ app.get("/vizualizare-comenzi", (req, res) => {
       db.all(
         `SELECT o.id AS order_id, oi.product_id, oi.quantity, p.nume AS product_name
          FROM orders o
-         JOIN orderItem oi ON o.id = oi.order_id
+         JOIN order_item oi ON o.id = oi.order_id
          JOIN produse p ON oi.product_id = p.id
          WHERE o.customer_id = ?`,
         [customer.id],
@@ -1512,13 +1512,12 @@ app.post("/sterge-comanda", async (req, res) => {
   const tagBuffer = Buffer.from(tag, "base64");
   const aesKey = Buffer.from(req.session.aesKey, "hex");
 
-  // Decrypt using C++ program (same function as your login decryption)
   const decrypted = await decryptAESWithCPP(
     ciphertext,
-    aesKey, // Ensure aesKey is stored in the session
-    "", // AAD (optional)
+    aesKey, 
+    "", 
     ivBuffer,
-    tagBuffer // Pass the authentication tag
+    tagBuffer 
   );
 
   const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
@@ -1526,7 +1525,7 @@ app.post("/sterge-comanda", async (req, res) => {
   const formData = JSON.parse(decryptedMessageString); // Parse the form data
   const orderId = formData.order_id;
   // Delete order items and the order itself
-  db.run("DELETE FROM orderItem WHERE order_id = ?", [orderId], (err) => {
+  db.run("DELETE FROM order_item WHERE order_id = ?", [orderId], (err) => {
     if (err) {
       console.error("Error deleting order items:", err);
       return res.status(500).send("Internal Server Error");
@@ -1546,10 +1545,6 @@ app.post("/sterge-comanda", async (req, res) => {
 app.post("/adaugare_cos", async (req, res) => {
   const { encryptedData, iv, tag } = req.body;
 
-  console.log("encryptedData: ", encryptedData);
-  console.log("iv: ", iv);
-  console.log("tag: ", tag);
-
   if (!encryptedData || !iv || !tag) {
     return res.status(400).json({ message: "Invalid encrypted input." });
   }
@@ -1562,216 +1557,221 @@ app.post("/adaugare_cos", async (req, res) => {
   // Decrypt using C++ program (same function as your login decryption)
   const decrypted = await decryptAESWithCPP(
     ciphertext,
-    aesKey, // Ensure aesKey is stored in the session
-    "", // AAD (optional)
+    aesKey,
+    "", 
     ivBuffer,
-    tagBuffer // Pass the authentication tag
+    tagBuffer
   );
 
-  const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
-  const decryptedMessageString = decryptedMessageBuffer.toString("utf-8"); // Convert Buffer to string
-  const formData = JSON.parse(decryptedMessageString); // Parse the form data
-  console.log("FormData: ", formData);
+  const decryptedMessageString = decrypted.encryptedmsg.toString("utf-8");
+  const formData = JSON.parse(decryptedMessageString);
 
   const productId = formData.id;
-  // Step 1: Get the customer_id from the customers table using the logged-in user's username
-  db.get(
-    "SELECT id FROM customers WHERE name = ?",
-    [req.cookies.username],
-    (err, customer) => {
-      if (err) throw err;
+  const quantityToAdd = 1; // The quantity that user wants to add to cart
 
-      if (customer) {
-        // Step 2: Check if the user already has a cart
-        db.get(
-          "SELECT id FROM cart WHERE customer_id = ?",
-          [customer.id],
-          (err, cart) => {
-            if (err) throw err;
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION;"); // Begin transaction to ensure atomic operations
 
-            // If the user doesn't have a cart, create one
-            let cartId = cart ? cart.id : null;
-            if (!cartId) {
-              // Create a new cart for the customer
-              db.run(
-                "INSERT INTO cart (customer_id) VALUES (?)",
-                [customer.id],
-                function (err) {
-                  if (err) throw err;
-                  cartId = this.lastID; // Get the new cart id
-                  console.log("New cart created with ID:", cartId);
-                }
-              );
-            }
+    // Step 1: Check and update stock if available
+    db.get(
+      "SELECT stoc FROM produse WHERE id = ?",
+      [productId],
+      (err, product) => {
+        if (err) {
+          db.run("ROLLBACK;");
+          throw err;
+        }
 
-            // Step 3: Fetch product details from the database
-            db.get(
-              "SELECT * FROM produse WHERE id = ?",
-              [productId],
-              (err, product) => {
-                if (err) throw err;
+        if (product && product.stoc >= quantityToAdd) {
+          // Step 2: Update stock
+          db.run(
+            "UPDATE produse SET stoc = stoc - ? WHERE id = ? AND stoc >= ?",
+            [quantityToAdd, productId, quantityToAdd],
+            function (err) {
+              if (err || this.changes === 0) {
+                db.run("ROLLBACK;");
+                res.status(400).send("Not enough stock available.");
+                return;
+              }
 
-                if (product) {
-                  // Step 4: Check if the product already exists in the cartItem table for the user's cart
+              // Proceed to add/update cart
+              const username = req.cookies.username;
+              db.get(
+                "SELECT id FROM customers WHERE name = ?",
+                [username],
+                (err, customer) => {
+                  if (err || !customer) {
+                    db.run("ROLLBACK;");
+                    res.status(404).send("Customer not found.");
+                    return;
+                  }
+
                   db.get(
-                    "SELECT * FROM cartItem WHERE cart_id = ? AND product_id = ?",
-                    [cartId, productId],
-                    (err, cartItem) => {
-                      if (err) throw err;
+                    "SELECT id FROM cart WHERE customer_id = ?",
+                    [customer.id],
+                    (err, cart) => {
+                      if (err) {
+                        db.run("ROLLBACK;");
+                        throw err;
+                      }
 
-                      if (cartItem) {
-                        // Step 5: If product exists, increase the quantity
-                        const newQuantity = cartItem.quantity + 1;
-                        if (newQuantity <= product.stoc) {
-                          db.run(
-                            "UPDATE cartItem SET quantity = ? WHERE id = ?",
-                            [newQuantity, cartItem.id],
-                            (err) => {
-                              if (err) throw err;
-                              console.log(
-                                `Updated quantity of ${product.nume} to ${newQuantity}`
-                              );
-                              res.redirect("/"); // Redirect to the main page
+                      let cartId = cart ? cart.id : null;
+                      if (!cartId) {
+                        db.run(
+                          "INSERT INTO cart (customer_id) VALUES (?)",
+                          [customer.id],
+                          function (err) {
+                            if (err) {
+                              db.run("ROLLBACK;");
+                              throw err;
                             }
-                          );
-                        } else {
-                          res.status(400).send("Not enough stock available."); // Error if quantity exceeds stock
-                        }
+                            cartId = this.lastID;
+                            insertCartItem(cartId, productId, quantityToAdd);
+                          }
+                        );
                       } else {
-                        // Step 6: If product doesn't exist, add it to the cartItem table with quantity 1
-                        if (product.stoc >= 1) {
-                          db.run(
-                            "INSERT INTO cartItem (cart_id, product_id, quantity) VALUES (?, ?, ?)",
-                            [cartId, productId, 1],
-                            (err) => {
-                              if (err) throw err;
-                              console.log(`Added ${product.nume} to the cart.`);
-                              res.redirect("/"); // Redirect to the main page
-                            }
-                          );
-                        } else {
-                          res.status(400).send("Not enough stock available."); // Error if product is out of stock
-                        }
+                        insertCartItem(cartId, productId, quantityToAdd);
                       }
                     }
                   );
-                } else {
-                  res.status(404).send("Product not found."); // Send a response back to the client if the product doesn't exist
                 }
+              );
+            }
+          );
+        } else {
+          db.run("ROLLBACK;");
+          res.status(400).send("Not enough stock available.");
+        }
+      }
+    );
+
+    function insertCartItem(cartId, productId, quantityToAdd) {
+      db.get(
+        "SELECT quantity FROM cart_item WHERE cart_id = ? AND product_id = ?",
+        [cartId, productId],
+        (err, item) => {
+          if (err) {
+            db.run("ROLLBACK;");
+            return res.status(500).send("Database error checking cart item.");
+          }
+    
+          if (item) {
+            // If item exists, update its quantity
+            const newQuantity = item.quantity + quantityToAdd;
+            db.run(
+              "UPDATE cart_item SET quantity = ? WHERE cart_id = ? AND product_id = ?",
+              [newQuantity, cartId, productId],
+              (err) => {
+                if (err) {
+                  db.run("ROLLBACK;");
+                  return res.status(500).send("Database error updating cart item.");
+                }
+                db.run("COMMIT;");
+                res.redirect("/"); // Redirect after successful update
+              }
+            );
+          } else {
+            // If item does not exist, insert it as a new entry
+            db.run(
+              "INSERT INTO cart_item (cart_id, product_id, quantity) VALUES (?, ?, ?)",
+              [cartId, productId, quantityToAdd],
+              (err) => {
+                if (err) {
+                  db.run("ROLLBACK;");
+                  return res.status(500).send("Database error inserting new cart item.");
+                }
+                db.run("COMMIT;");
+                res.redirect("/"); 
               }
             );
           }
-        );
-      } else {
-        res.status(404).send("Customer not found."); // Send a response back if the customer does not exist
-      }
+        }
+      );
     }
-  );
+  });
 });
+
 app.post("/place-order", async (req, res) => {
-  const username = req.cookies.username; // Get the username from cookies
+  const username = req.cookies.username; 
   if (!username) {
     return res
       .status(401)
       .json({ message: "You must be logged in to place an order." });
   }
 
-  db.get(
-    "SELECT id FROM customers WHERE name = ?",
-    [username],
-    (err, customer) => {
-      if (err)
-        return res
-          .status(500)
-          .json({ message: "Database error. Error fining the customer" });
-      if (!customer)
-        return res.status(404).json({ message: "Customer not found." });
+  db.get("SELECT id FROM customers WHERE name = ?", [username], (err, customer) => {
+    if (err) {
+      return res.status(500).json({ message: "Database error while finding the customer." });
+    }
+    if (!customer) {
+      return res.status(404).json({ message: "Customer not found." });
+    }
 
-      const customerId = customer.id;
+    const customerId = customer.id;
 
-      // Check stock availability and move items
-      db.all(
-        `SELECT ci.product_id, ci.quantity, p.stoc 
-         FROM cartItem ci 
-         JOIN cart c ON ci.cart_id = c.id 
-         JOIN produse p ON ci.product_id = p.id 
-         WHERE c.customer_id = ?`,
-        [customerId],
-        (err, cartItems) => {
-          if (err)
-            return res.status(500).json({
-              message: "Database error. Error selecting the products  ",
-            });
+    // Retrieve all cart items for the customer
+    db.all(
+      `SELECT ci.product_id, ci.quantity
+       FROM cart_item ci 
+       JOIN cart c ON ci.cart_id = c.id 
+       WHERE c.customer_id = ?`,
+      [customerId],
+      (err, cartItems) => {
+        if (err) {
+          return res.status(500).json({ message: "Database error while selecting cart items." });
+        }
 
-          const insufficientStock = cartItems.find(
-            (item) => item.quantity > item.stoc
-          );
-          if (insufficientStock) {
-            return res.status(400).json({
-              message: `Insufficient stock for product ID ${insufficientStock.product_id}.`,
-            });
+        // Insert into orders table
+        db.run("INSERT INTO orders (customer_id) VALUES (?)", [customerId], function (err) {
+          if (err) {
+            return res.status(500).json({ message: "Database error while inserting order." });
           }
 
-          // Insert into Orders table
-          db.run(
-            "INSERT INTO Orders (customer_id) VALUES (?)",
-            [customerId],
-            function (err) {
-              if (err)
-                return res.status(500).json({ message: "Database error." });
+          const orderId = this.lastID;
 
-              const orderId = this.lastID;
+          // Insert into order_item table
+          const orderItemQueries = cartItems.map(
+            (item) =>
+              new Promise((resolve, reject) => {
+                db.run(
+                  `INSERT INTO order_item (order_id, product_id, quantity) VALUES (?, ?, ?)`,
+                  [orderId, item.product_id, item.quantity],
+                  (err) => (err ? reject(err) : resolve())
+                );
+              })
+          );
 
-              // Insert into OrderItem table
-              const orderItemQueries = cartItems.map(
-                (item) =>
-                  new Promise((resolve, reject) => {
-                    db.run(
-                      `INSERT INTO OrderItem (order_id, product_id, quantity) VALUES (?, ?, ?)`,
-                      [orderId, item.product_id, item.quantity],
-                      (err) => (err ? reject(err) : resolve())
-                    );
-                  })
-              );
-
-              // Update stock and clear cart
-              const stockUpdateQueries = cartItems.map(
-                (item) =>
-                  new Promise((resolve, reject) => {
-                    db.run(
-                      `UPDATE produse SET stoc = stoc - ? WHERE id = ?`,
-                      [item.quantity, item.product_id],
-                      (err) => (err ? reject(err) : resolve())
-                    );
-                  })
-              );
-
-              Promise.all([...orderItemQueries, ...stockUpdateQueries])
-                .then(() => {
-                  // Clear the cart
+          Promise.all(orderItemQueries)
+            .then(() => {
+              // Clear the cart after successfully placing the order
+              db.run(
+                `DELETE FROM cart_item WHERE cart_id = ?`,
+                [cartItems[0].cart_id], // Assuming all items come from the same cart
+                (err) => {
+                  if (err) {
+                    return res.status(500).json({ message: "Error clearing cart items." });
+                  }
+                  // Delete the cart itself
                   db.run(
-                    `DELETE FROM cartItem WHERE cart_id IN (SELECT id FROM cart WHERE customer_id = ?)`,
-                    [customerId],
+                    `DELETE FROM cart WHERE id = ?`,
+                    [cartItems[0].cart_id],
                     (err) => {
-                      if (err)
-                        return res
-                          .status(500)
-                          .json({ message: "Error clearing cart." });
+                      if (err) {
+                        return res.status(500).json({ message: "Error deleting cart." });
+                      }
                       res.json({ message: "Order placed successfully!" });
                     }
                   );
-                })
-                .catch(() => {
-                  res
-                    .status(500)
-                    .json({ message: "Error processing the order." });
-                });
-            }
-          );
-        }
-      );
-    }
-  );
+                }
+              );
+            })
+            .catch((error) => {
+              res.status(500).json({ message: "Error processing the order: " + error });
+            });
+        });
+      }
+    );
+  });
 });
 app.post("/update-cart", async (req, res) => {
   const { encryptedData, iv, tag } = req.body;
@@ -1798,96 +1798,204 @@ app.post("/update-cart", async (req, res) => {
     tagBuffer // Pass the authentication tag
   );
 
-  const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
-  const decryptedMessageString = decryptedMessageBuffer.toString("utf-8"); // Convert Buffer to string
-  const formData = JSON.parse(decryptedMessageString); // Parse the form data
+  const decryptedMessageBuffer = decrypted.encryptedmsg; 
+  const decryptedMessageString = decryptedMessageBuffer.toString("utf-8"); 
+  const formData = JSON.parse(decryptedMessageString); 
   console.log("decryptedMessageString: ", decryptedMessageString);
   console.log("FormData: ", formData);
-  const username = req.cookies.username; // Get the username from the cookies
+  const username = req.cookies.username; 
 
   if (!username) {
-    return res.redirect("/login"); // If no user is logged in, redirect to login page
+    return res.redirect("/login"); 
   }
 
-  // Step 1: Get the customer_id using the username
+  
   db.get(
     "SELECT id FROM customers WHERE name = ?",
     [username],
     (err, customer) => {
-      if (err) throw err;
+        if (err) {
+            console.error("Database error:", err);
+            return res.status(500).send("Internal server error");
+        }
 
-      if (customer) {
-        // Step 2: Update quantity or delete items
+        if (!customer) {
+            return res.status(404).send("Customer not found.");
+        }
+
         const updatePromises = [];
         const deletePromises = [];
+var ok=0;
+        Object.keys(formData).forEach( async (key) => {
+            const [action, productId] = key.split("_");
+            if (action === "quantity") {
+                const quantity = parseInt(formData[key]);
 
-        // Loop through all the request fields for updating quantity or deleting
-        Object.keys(formData).forEach((key) => {
-          const [action, productId] = key.split("_"); // Get the action (delete or quantity) and productId
+                if (!isNaN(quantity) && quantity > 0) {
+                    db.get("SELECT id FROM cart WHERE customer_id = ?", [customer.id], (err, cart) => {
+                        if (err) {
+                            console.error("Error retrieving cart id:", err);
+                            return;
+                        }
 
-          if (action === "quantity") {
-            const quantity = parseInt(formData[key]);
+                        if (cart) {
+                          const updateCartItemAndStock =  (db, cartId, productId, requestedQuantity, customerId) => {
+                            return new Promise((resolve, reject) => {
+                               
+                        
+                                    db.get(`
+                                        SELECT ci.quantity AS currentQuantity, p.stoc AS currentStock
+                                        FROM cart_item ci
+                                        JOIN produse p ON ci.product_id = p.id
+                                        WHERE ci.cart_id = ? AND ci.product_id = ?
+                                    `, [cartId, productId], (err, row) => {
+                                        if (err) {
+                                          if(ok==0){
+                                          ok=1;
+                                          db.run('ROLLBACK;');
+                                          }
+                                            
+                                            return reject("Error fetching current quantities");
+                                        }
+                        
+                                        const { currentQuantity, currentStock } = row;
+                                        let newStock;
+                        
+                                        if (requestedQuantity > currentQuantity) {
+                                            newStock = currentStock - (requestedQuantity - currentQuantity);
+                                            if (newStock < 0) {
+                                              if(ok==0){
+                                                ok=1;
+                                                db.run('ROLLBACK;');
+                                                }
+                                                return reject("There is not enough stock available");
+                                            }
+                                        } else {
+                                            newStock = currentStock + (currentQuantity - requestedQuantity);
+                                        }
+                        
+                                        db.run(`
+                                            UPDATE produse
+                                            SET stoc = ?
+                                            WHERE id = ?
+                                        `, [newStock, productId], (err) => {
+                                            if (err) {
+                                              if(ok==0){
+                                                ok=1;
+                                                db.run('ROLLBACK;');
+                                                }
+                                                return reject("Error updating stock");
+                                            }
+                        
+                                            db.run(`
+                                                UPDATE cart_item
+                                                SET quantity = ?
+                                                WHERE cart_id = ? AND product_id = ?
+                                            `, [requestedQuantity, cartId, productId], (err) => {
+                                                if (err) {
+                                                  if(ok==0){
+                                                    ok=1;
+                                                    db.run('ROLLBACK;');
+                                                    }
+                                                    return reject("Error updating cart item");
+                                                }
+                        
+                                               
+                                                resolve();
 
-            // Check if the quantity is valid
-            if (!isNaN(quantity) && quantity > 0) {
-              // Use a promise to handle async updates
-              updatePromises.push(
-                new Promise((resolve, reject) => {
-                  db.run(
-                    `UPDATE cartItem 
-                 SET quantity = ? 
-                 WHERE cart_id IN (SELECT id FROM cart WHERE customer_id = ?) AND product_id = ?`,
-                    [quantity, customer.id, parseInt(productId)],
-                    (err) => {
-                      if (err) reject(err);
-                      else resolve();
-                    }
-                  );
-                })
-              );
+                                            });
+                                        });
+                                    });
+                                
+                            });
+                        };
+                        
+                         updatePromises.push( updateCartItemAndStock(db, cart.id, parseInt(productId), quantity, customer.id)
+                        .catch((error) => {
+                            console.error("Error updating stock or cart item:", error);
+                        }));
+                       
+                        }
+                    });
+                }
+            } else if (action === "delete") {
+                deletePromises.push(new Promise((resolve, reject) => {
+                        db.get(`
+                            SELECT quantity
+                            FROM cart_item
+                            WHERE cart_id IN (SELECT id FROM cart WHERE customer_id = ?) AND product_id = ?
+                        `, [customer.id, parseInt(productId)], (err, result) => {
+                            if (err) {
+                                db.run('ROLLBACK;');
+                                return reject("Error fetching current quantity");
+                            }
+
+                            const { quantity } = result;
+
+                            db.run(`
+                                UPDATE produse
+                                SET stoc = stoc + ?
+                                WHERE id = ?
+                            `, [quantity, parseInt(productId)], (err) => {
+                                if (err) {
+                                    db.run('ROLLBACK;');
+                                    return reject("Error updating stock");
+                                }
+
+                                db.run(`
+                                    DELETE FROM cart_item
+                                    WHERE cart_id IN (SELECT id FROM cart WHERE customer_id = ?) AND product_id = ?
+                                `, [customer.id, parseInt(productId)], (err) => {
+                                    if (err) {
+                                        db.run('ROLLBACK;');
+                                        return reject("Error deleting cart item");
+                                    }
+                                    resolve();
+                                });
+                            });
+                        });
+                   
+                }));
             }
-          } else if (action === "delete") {
-            // Use a promise to handle async deletions
-            deletePromises.push(
-              new Promise((resolve, reject) => {
-                db.run(
-                  `DELETE FROM cartItem 
-               WHERE cart_id IN (SELECT id FROM cart WHERE customer_id = ?) AND product_id = ?`,
-                  [customer.id, parseInt(productId)],
-                  (err) => {
-                    if (err) reject(err);
-                    else resolve();
-                  }
-                );
-              })
-            );
-          }
         });
+        db.run('BEGIN TRANSACTION;', (err) => {
+          if (err) return reject("Error starting transaction");
 
-        // Execute all the update and delete promises
         Promise.all([...updatePromises, ...deletePromises])
-          .then(() => {
-            // Redirect back to the cart page after updating the cart
-            res.redirect("/vizualizare-cos");
-          })
-          .catch((error) => {
-            console.error("Error updating cart:", error);
-            res.status(500).send("Failed to update the cart.");
+        .then(() => {
+          if(ok==0){
+            db.run('COMMIT;', (err) => {
+              if (err) {
+                  db.run('ROLLBACK;');
+              }
           });
-      } else {
-        res.status(404).send("Customer not found.");
-      }
+        }
+        
+           })
+            .then(() => {
+                res.redirect("/vizualizare-cos");
+            })
+            .catch((error) => {
+                console.error("Error updating cart:", error);
+              db.run('ROLLBACK;');
+
+                res.status(500).send(error);
+            });
+            
+      });
+
+            
     }
-  );
+);
 });
 app.get("/vizualizare-cos", (req, res) => {
-  const username = req.cookies.username; // Get the username from the cookies
+  const username = req.cookies.username; 
 
   if (!username) {
-    return res.redirect("/login"); // If no user is logged in, redirect to login page
+    return res.redirect("/login"); 
   }
 
-  // Step 1: Get the customer_id using the username
+  
   db.get(
     "SELECT id FROM customers WHERE name = ?",
     [username],
@@ -1897,7 +2005,7 @@ app.get("/vizualizare-cos", (req, res) => {
       if (customer) {
         // Step 2: Retrieve the cart items for the customer
         db.all(
-          `SELECT ci.product_id, ci.quantity, p.nume, p.pret FROM cartItem ci
+          `SELECT ci.product_id, ci.quantity, p.nume, p.pret FROM cart_item ci
          JOIN produse p ON ci.product_id = p.id
          WHERE ci.cart_id IN (SELECT id FROM cart WHERE customer_id = ?)`,
           [customer.id],

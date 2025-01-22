@@ -23,5 +23,10 @@
     "utilizator": "mircea",
     "parola": "$2b$10$f7.wbLA0K/2APKMp.k.5LeCB5LVGB7SyfVp7Y8aELSmet/yc9gMa.",
     "admin": false
+  },
+  {
+    "utilizator": "student",
+    "parola": "$2b$10$Si0FsJjiRad/aYyaAD7UHOdtT4tXhiP6VAcTB/s4Li7GIr.mBHLoe",
+    "admin": false
   }
 ]
