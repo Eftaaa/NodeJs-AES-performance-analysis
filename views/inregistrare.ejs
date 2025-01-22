@@ -8,8 +8,10 @@
 
   <button type="submit">Sign Up</button>
   <% if (errorMessage) { %>
-  <p style="color: red"><%= errorMessage %></p>
-  <% } %>
+    <p style="color: red">
+      <%= errorMessage %>
+    </p>
+    <% } %>
 </form>
 
 <script>
@@ -22,15 +24,12 @@
       const formData = new FormData(form);
 
       try {
-        // Convert form data to an object
         const formObject = Object.fromEntries(formData.entries());
         console.log("Submitting form data:", formObject);
 
         const plaintext = JSON.stringify(formObject);
-        // Generate a random IV (12 bytes for AES-GCM)
         const IV = crypto.getRandomValues(new Uint8Array(12));
 
-        // Encode the plaintext as a Uint8Array
         const encoder = new TextEncoder();
         const plaintextBytes = encoder.encode(plaintext);
 
@@ -52,8 +51,8 @@
 
         // Extract ciphertext and authentication tag from the encrypted buffer
         const encryptedBytes = new Uint8Array(encryptedDataBuffer);
-        const ciphertext = encryptedBytes.slice(0, -16); // Ciphertext (everything except the last 16 bytes)
-        const tag = encryptedBytes.slice(-16); // Authentication tag (last 16 bytes)
+        const ciphertext = encryptedBytes.slice(0, -16);
+        const tag = encryptedBytes.slice(-16);
 
         // Convert ciphertext and tag to Base64
         const ciphertextBase64 = btoa(String.fromCharCode(...ciphertext));
@@ -63,7 +62,7 @@
         console.log("Sending encrypted data to server:", {
           encryptedData: ciphertextBase64,
           iv: ivBase64,
-          tag: tagBase64, // Send tag as Base64
+          tag: tagBase64,
         });
         // Send the encrypted data to the server
         const response = await fetch(form.action, {
@@ -101,14 +100,12 @@
 
         console.log("Decrypted response data:", decryptedData);
 
-        // If it's a redirect, handle it
         const parsedData = JSON.parse(decryptedData);
         if (parsedData.isRedirect) {
           await loadEncryptedContent(parsedData.url);
         } else {
           document.querySelector("#content").innerHTML = parsedData.data;
 
-          // Execute any scripts in the new content
           const scripts = doc.querySelectorAll("script");
           scripts.forEach((script) => {
             const newScript = document.createElement("script");

@@ -1,155 +1,154 @@
 <h1>Comenzile Tale</h1>
-<% if (orders.length === 0) { %>
-<p>Nu ai plasat nicio comandă încă.</p>
-<% } else { %>
-<table>
-  <thead>
-    <tr>
-      <th>ID Comandă</th>
-      <th>Produse</th>
-      <th>Cantități</th>
-      <th>Acțiuni</th>
-    </tr>
-  </thead>
-  <tbody>
-    <% orders.forEach(order => { %>
-    <tr>
-      <td><%= order.id %></td>
-      <td>
-        <% order.items.forEach(item => { %>
-        <p><%= item.product_name %></p>
-        <% }); %>
-      </td>
-      <td>
-        <% order.items.forEach(item => { %>
-        <p><%= item.quantity %></p>
-        <% }); %>
-      </td>
-      <td>
-        <form action="/sterge-comanda" method="POST" id="deleteForm-<%= order.id %>"">
-          <input type="hidden" name="order_id" value="<%= order.id %>" />
-          <button type="submit" class="btn">Șterge Comanda</button>
-        </form>
-      </td>
-    </tr>
-    <% }); %>
-  </tbody>
-</table>
-<% } %>
-<script>
-  // Assuming `aesKey` is defined earlier in the script
-  document.querySelectorAll("form[id^='deleteForm-']").forEach((form) => {
-    form.addEventListener("submit", async function (event) {
-      event.preventDefault(); // Prevent default form submission
+<% if (orders.length===0) { %>
+  <p>Nu ai plasat nicio comandă încă.</p>
+  <% } else { %>
+    <table>
+      <thead>
+        <tr>
+          <th>ID Comandă</th>
+          <th>Produse</th>
+          <th>Cantități</th>
+          <th>Acțiuni</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% orders.forEach(order=> { %>
+          <tr>
+            <td>
+              <%= order.id %>
+            </td>
+            <td>
+              <% order.items.forEach(item=> { %>
+                <p>
+                  <%= item.product_name %>
+                </p>
+                <% }); %>
+            </td>
+            <td>
+              <% order.items.forEach(item=> { %>
+                <p>
+                  <%= item.quantity %>
+                </p>
+                <% }); %>
+            </td>
+            <td>
+              <form action="/sterge-comanda" method="POST" id="deleteForm-<%= order.id %>"">
+          <input type=" hidden" name="order_id" value="<%= order.id %>" />
+              <button type="submit" class="btn">Șterge Comanda</button>
+              </form>
+            </td>
+          </tr>
+          <% }); %>
+      </tbody>
+    </table>
+    <% } %>
+      <script>
+        document.querySelectorAll("form[id^='deleteForm-']").forEach((form) => {
+          form.addEventListener("submit", async function (event) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
 
-      const form = event.target;
-      const formData = new FormData(form);
+            try {
+              const formObject = Object.fromEntries(formData.entries());
+              console.log("Submitting form data:", formObject);
+              const plaintext = JSON.stringify(formObject);
 
-      try {
-        // Convert form data to an object
-        const formObject = Object.fromEntries(formData.entries());
-        console.log("Submitting form data:", formObject);
-        const plaintext = JSON.stringify(formObject);
+              const IV = crypto.getRandomValues(new Uint8Array(12));
 
-        // Generate a random IV (12 bytes for AES-GCM)
-        const IV = crypto.getRandomValues(new Uint8Array(12));
+              const encoder = new TextEncoder();
+              const plaintextBytes = encoder.encode(plaintext);
 
-        // Encode the plaintext as a Uint8Array
-        const encoder = new TextEncoder();
-        const plaintextBytes = encoder.encode(plaintext);
+              // Import the raw key data into a CryptoKey object
+              const aesKeyData = await crypto.subtle.importKey(
+                "raw", // Raw key format
+                aesKey, // Raw key data
+                { name: "AES-GCM" }, // AES-GCM encryption algorithm
+                false, // The key is not extractable
+                ["encrypt", "decrypt"] // Key usage
+              );
 
-        // Import the raw key data into a CryptoKey object
-        const aesKeyData = await crypto.subtle.importKey(
-          "raw", // Raw key format
-          aesKey, // Raw key data
-          { name: "AES-GCM" }, // AES-GCM encryption algorithm
-          false, // The key is not extractable
-          ["encrypt", "decrypt"] // Key usage
-        );
+              // Encrypt the plaintext
+              const encryptedDataBuffer = await crypto.subtle.encrypt(
+                { name: "AES-GCM", iv: IV },
+                aesKeyData,
+                plaintextBytes
+              );
 
-        // Encrypt the plaintext
-        const encryptedDataBuffer = await crypto.subtle.encrypt(
-          { name: "AES-GCM", iv: IV },
-          aesKeyData,
-          plaintextBytes
-        );
+              // Extract ciphertext and authentication tag from the encrypted buffer
+              const encryptedBytes = new Uint8Array(encryptedDataBuffer);
+              const ciphertext = encryptedBytes.slice(0, -16);
+              const tag = encryptedBytes.slice(-16);
 
-        // Extract ciphertext and authentication tag from the encrypted buffer
-        const encryptedBytes = new Uint8Array(encryptedDataBuffer);
-        const ciphertext = encryptedBytes.slice(0, -16); // Ciphertext (everything except the last 16 bytes)
-        const tag = encryptedBytes.slice(-16); // Authentication tag (last 16 bytes)
+              // Convert ciphertext and tag to Base64
+              const ciphertextBase64 = btoa(String.fromCharCode(...ciphertext));
+              const tagBase64 = btoa(String.fromCharCode(...tag));
+              const ivBase64 = btoa(String.fromCharCode(...IV));
 
-        // Convert ciphertext and tag to Base64
-        const ciphertextBase64 = btoa(String.fromCharCode(...ciphertext));
-        const tagBase64 = btoa(String.fromCharCode(...tag));
-        const ivBase64 = btoa(String.fromCharCode(...IV));
+              console.log("Sending encrypted data to server:", {
+                encryptedData: ciphertextBase64,
+                iv: ivBase64,
+                tag: tagBase64,
+              });
 
-        console.log("Sending encrypted data to server:", {
-          encryptedData: ciphertextBase64,
-          iv: ivBase64,
-          tag: tagBase64, // Send tag as Base64
+              // Send the encrypted data to the server
+              const response = await fetch(form.action, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  encryptedData: ciphertextBase64,
+                  iv: ivBase64,
+                  tag: tagBase64,
+                }),
+              });
+
+              if (!response.ok) {
+                if (response.status === 401) {
+                  document.getElementById("errorMessage").textContent =
+                    "Authentication failed. Please try again.";
+                  document.getElementById("errorMessage").style.display = "block";
+                  return;
+                }
+                throw new Error("Form submission failed");
+              }
+
+              // Parse the encrypted response
+              const { encryptedData, authTag, aad, iv } = await response.json();
+
+              // Decrypt and handle the content
+              const decryptedData = await decryptData(
+                encryptedData,
+                aesKey,
+                iv,
+                aad,
+                authTag
+              );
+
+              console.log("Decrypted response data:", decryptedData);
+
+              const parsedData = JSON.parse(decryptedData);
+              if (parsedData.isRedirect) {
+                // Redirect to a new page
+                await loadEncryptedContent(parsedData.url);
+              } else {
+                document.querySelector("#content").innerHTML = parsedData.data;
+
+                const scripts = doc.querySelectorAll("script");
+                scripts.forEach((script) => {
+                  const newScript = document.createElement("script");
+                  newScript.text = script.textContent;
+                  document.body.appendChild(newScript);
+                  document.body.removeChild(newScript);
+                });
+              }
+            } catch (error) {
+              console.error("Error handling form submission:", error);
+              document.getElementById("errorMessage").textContent =
+                "An error occurred. Please try again.";
+              document.getElementById("errorMessage").style.display = "block";
+            }
+          });
         });
-
-        // Send the encrypted data to the server
-        const response = await fetch(form.action, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            encryptedData: ciphertextBase64,
-            iv: ivBase64,
-            tag: tagBase64,
-          }),
-        });
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            document.getElementById("errorMessage").textContent =
-              "Authentication failed. Please try again.";
-            document.getElementById("errorMessage").style.display = "block";
-            return;
-          }
-          throw new Error("Form submission failed");
-        }
-
-        // Parse the encrypted response
-        const { encryptedData, authTag, aad, iv } = await response.json();
-
-        // Decrypt and handle the content
-        const decryptedData = await decryptData(
-          encryptedData,
-          aesKey,
-          iv,
-          aad,
-          authTag
-        );
-
-        console.log("Decrypted response data:", decryptedData);
-
-        // If it's a redirect, handle it
-        const parsedData = JSON.parse(decryptedData);
-        if (parsedData.isRedirect) {
-          // Redirect to a new page
-          await loadEncryptedContent(parsedData.url);
-        } else {
-            document.querySelector("#content").innerHTML = parsedData.data;
-
-// Execute any scripts in the new content
-const scripts = doc.querySelectorAll("script");
-scripts.forEach((script) => {
-  const newScript = document.createElement("script");
-  newScript.text = script.textContent;
-  document.body.appendChild(newScript);
-  document.body.removeChild(newScript);
-});
-        }
-      } catch (error) {
-        console.error("Error handling form submission:", error);
-        document.getElementById("errorMessage").textContent =
-          "An error occurred. Please try again.";
-        document.getElementById("errorMessage").style.display = "block";
-      }
-    });
-  });
-</script>
+      </script>

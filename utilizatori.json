@@ -1,10 +1,5 @@
 [
   {
-    "utilizator": "relu",
-    "parola": "$2b$10$ZR1K4GxFZxxxKXicght9zuUH4Z5OJ4hn/TUzd55St7rtorWHWNSeu",
-    "admin": false
-  },
-  {
     "utilizator": "admin",
     "parola": "$2b$10$LjDVNuXN4uqNYXjSorDiCO3m1nq4BgxfPMpaqGYh9ZhWjUrYLKN1i",
     "admin": true
@@ -12,16 +7,6 @@
   {
     "utilizator": "test",
     "parola": "$2b$10$LHJYWCmFDCEhXnPwBg5yCOYe5AuIpFS90/PV4.ugAub3mDNKGRDhu",
-    "admin": false
-  },
-  {
-    "utilizator": "sadasd",
-    "parola": "$2b$10$.N.Gu36pNQ5KuPTYLi40luXpkj9tu1/4VW7PuKOJOkQ58/RkdKXB6",
-    "admin": false
-  },
-  {
-    "utilizator": "mircea",
-    "parola": "$2b$10$f7.wbLA0K/2APKMp.k.5LeCB5LVGB7SyfVp7Y8aELSmet/yc9gMa.",
     "admin": false
   },
   {

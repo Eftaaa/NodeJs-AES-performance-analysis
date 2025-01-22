@@ -3,84 +3,80 @@
     <ul>
       <li><a href="/">Home</a></li>
       <li><a href="/chestionar">Chestionar</a></li>
-      <% if (username != null && typeof admin !== 'undefined' && admin) { %>
-      <li><a href="/admin">Admin</a></li>
-      <% } %>
+      <% if (username !=null && typeof admin !=='undefined' && admin) { %>
+        <li><a href="/admin">Admin</a></li>
+        <% } %>
     </ul>
   </nav>
 </head>
-<body>
-  <% if (username != null) { %>
-  <a href="/vizualizare-cos" class="button">Vizualizare Cos</a>
-  <a href="/vizualizare-comenzi" class="button">Vizualizare Comenzi</a>
-  <% } %>
-  <div class="button-container">
-    <% if (username != null && typeof admin !== 'undefined' && admin) { %>
 
-    <button
-      onclick="loadEncryptedContent('/creare-bd')"
-      id="create-db-btn"
-      class="button"
-    >
-      Creare BD
-    </button>
-    <button
-      onclick="loadEncryptedContent('/inserare-bd')"
-      id="load-db-btn"
-      class="button"
-    >
-      Încarcare BD
-    </button>
+<body>
+  <% if (username !=null) { %>
+    <a href="/vizualizare-cos" class="button">Vizualizare Cos</a>
+    <a href="/vizualizare-comenzi" class="button">Vizualizare Comenzi</a>
     <% } %>
-  </div>
-  <h1>Product List</h1>
-  <table>
-    <tr>
-      <th>ID</th>
-      <th>Name</th>
-      <th>Price</th>
-      <% if (authenticated) { %>
-      <th>Action</th>
-      <% } %>
-    </tr>
-    <% products.forEach(product => { %>
-    <tr>
-      <td><%= product.id %></td>
-      <td><%= product.nume %></td>
-      <td><%= product.pret.toFixed(2) %></td>
-      <% if (authenticated) { %>
-      <td>
-        <% if (product.stoc > 0) { %>
-        <form method="POST" action="/adaugare_cos">
-          <input type="hidden" name="id" value="<%= product.id %>" />
-          <button type="submit">Adaugă în coș</button>
-        </form>
-        <% } else { %>
-        <span style="color: red">Produs indisponibil</span>
-        <% } %>
-      </td>
-      <% } %>
-    </tr>
-    <% }); %>
-  </table>
+      <div class="button-container">
+        <% if (username !=null && typeof admin !=='undefined' && admin) { %>
+
+          <button onclick="loadEncryptedContent('/creare-bd')" id="create-db-btn" class="button">
+            Creare BD
+          </button>
+          <button onclick="loadEncryptedContent('/inserare-bd')" id="load-db-btn" class="button">
+            Încarcare BD
+          </button>
+          <% } %>
+      </div>
+      <h1>Product List</h1>
+      <table>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Price</th>
+          <% if (authenticated) { %>
+            <th>Action</th>
+            <% } %>
+        </tr>
+        <% products.forEach(product=> { %>
+          <tr>
+            <td>
+              <%= product.id %>
+            </td>
+            <td>
+              <%= product.nume %>
+            </td>
+            <td>
+              <%= product.pret.toFixed(2) %>
+            </td>
+            <% if (authenticated) { %>
+              <td>
+                <% if (product.stoc> 0) { %>
+                  <form method="POST" action="/adaugare_cos">
+                    <input type="hidden" name="id" value="<%= product.id %>" />
+                    <button type="submit">Adaugă în coș</button>
+                  </form>
+                  <% } else { %>
+                    <span style="color: red">Produs indisponibil</span>
+                    <% } %>
+              </td>
+              <% } %>
+          </tr>
+          <% }); %>
+      </table>
 </body>
 <script>
   document.querySelectorAll("form[action='/adaugare_cos']").forEach((form) => {
     form.addEventListener("submit", async (event) => {
-      event.preventDefault(); // Prevent default form submission
+      event.preventDefault();
 
       const formData = new FormData(form);
 
       try {
-        // Convert form data to an object
         const formObject = Object.fromEntries(formData.entries());
         console.log("Submitting form data:", formObject);
         const plaintext = JSON.stringify(formObject);
 
-        // Generate a random IV (12 bytes for AES-GCM)
         const IV = crypto.getRandomValues(new Uint8Array(12));
 
-        // Encode the plaintext as a Uint8Array
         const encoder = new TextEncoder();
         const plaintextBytes = encoder.encode(plaintext);
 
@@ -113,9 +109,8 @@
         console.log("Sending encrypted data to server:", {
           encryptedData: ciphertextBase64,
           iv: ivBase64,
-          tag: tagBase64, // Send tag as Base64
+          tag: tagBase64,
         });
-        // Send the encrypted data to the server
         const response = await fetch(form.action, {
           method: "POST",
           headers: {
@@ -145,18 +140,15 @@
         const parsedData = JSON.parse(decryptedData);
 
         if (parsedData.isRedirect) {
-          // Handle redirect securely
           await loadEncryptedContent(parsedData.url);
           history.pushState(null, "", parsedData.url); // Update browser history
           showFloatingMessage(`Product was added successfully!`, "success");
         } else {
-          // Show error message if not redirected
           showFloatingMessage(parsedData.data, "error");
         }
       } catch (error) {
         console.error("Error adding product to cart:", error);
 
-        // Handle undefined decryptedData gracefully
         if (error instanceof SyntaxError) {
           showFloatingMessage(
             "An unexpected error occurred. Please try again.",

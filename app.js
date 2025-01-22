@@ -23,7 +23,6 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use(bodyParser.json());
 // utilizarea unui algoritm de deep parsing care suportă obiecte în obiecte
 app.use(bodyParser.urlencoded({ extended: true }));
-// la accesarea din browser adresei http://localhost:6789/ se va returna textul 'HelloWorld'
 // proprietățile obiectului Request - req - https://expressjs.com/en/api.html#req
 // proprietățile obiectului Response - res - https://expressjs.com/en/api.html#res
 // directorul 'views' va conține fișierele .ejs (html + js executat la server)
@@ -97,7 +96,6 @@ function sleep(ms) {
 
 let redirectingflag = false;
 
-// Middleware to encrypt all responses
 app.use((req, res, next) => {
   if (!req.session.aesKey || req.session.aesKey == null) {
     console.log("AES key is not set. Skipping encryption.");
@@ -105,7 +103,7 @@ app.use((req, res, next) => {
   }
 
   const originalSend = res.send;
-  const originalRedirect = res.redirect; // Save the original redirect method
+  const originalRedirect = res.redirect;
   res.redirect = async function (url) {
     try {
       if (!req.session.aesKey) {
@@ -116,7 +114,7 @@ app.use((req, res, next) => {
       const aesKey = Buffer.from(req.session.aesKey, "hex");
       const sequenceNumber = ++req.session.sequenceNumber || 1;
       const iv = generateIV(sequenceNumber);
-      const aad = ""; // Use actual AAD if needed
+      const aad = "";
 
       const redirectData = JSON.stringify({ isRedirect: true, url });
 
@@ -153,19 +151,17 @@ app.use((req, res, next) => {
         return originalSend.call(this, data);
       }
 
-      //  await console.log("Original response data:", data);
 
       const redirectData = JSON.stringify({ isRedirect: false, data });
 
       const aesKey = Buffer.from(req.session.aesKey, "hex");
       await console.log(aesKey);
 
-      const sequenceNumber = ++req.session.sequenceNumber || 1; // Increment or initialize
+      const sequenceNumber = ++req.session.sequenceNumber || 1;
       const iv = generateIV(sequenceNumber);
 
-      // Additional authenticated data
-      const aad = ""; // Use actual AAD if needed
-      // Encrypt data
+      const aad = "";
+
       const { encryptedmsg, authTagCpp } = await encryptAESWithCPP(
         redirectData,
         aesKey,
@@ -198,52 +194,7 @@ app.use((req, res, next) => {
 
   next();
 });
-// app.use(async (req, res, next) => {
-//   if (!req.session.aesKey) {
-//     console.log("AES key is not set. Skipping decryption.");
-//     return next(); // Skip encryption and continue to the next middleware/route
-//   }
-//   // Skip decryption if there's nothing to decrypt
-//   if (
-//     !req.body ||
-//     !req.body.encryptedData ||
-//     !req.body.authTag ||
-//     !req.body.iv
-//   ) {
-//     console.log("No encrypted data found in the request. Skipping decryption.");
-//     return next();
-//   }
-//   try {
-//     const aesKey = Buffer.from(req.session.aesKey, "hex");
 
-//     const { encryptedData, authTag, aad, iv } = req.body;
-
-//     // Convert from Base64 to Buffers
-//     const encryptedDataBuffer = Buffer.from(encryptedData, "base64");
-//     const authTagBuffer = Buffer.from(authTag, "base64");
-//     const aadBuffer = Buffer.from(aad, "base64");
-//     const ivBuffer = Buffer.from(iv, "hex");
-
-//     // Decrypt data
-//     const rawData = await decryptAESWithCPP(
-//       encryptedDataBuffer,
-//       aesKey,
-//       aadBuffer,
-//       ivBuffer,
-//       authTagBuffer
-//     );
-
-//     // Replace body with decrypted data
-//     req.body = JSON.parse(rawData.toString("utf-8")); // Assuming JSON data
-
-//     next();
-//   } catch (err) {
-//     console.error("Request decryption failed:", err);
-//     res.status(400).send("Request decryption failed");
-//   }
-// });
-
-// Endpoint to send public key to the client
 app.get("/public-key", (req, res) => {
   res.json({ publicKey });
 });
@@ -253,20 +204,19 @@ app.post("/exchange-key", (req, res) => {
   const encryptedAESKey = Buffer.from(req.body.encryptedKey, "base64");
   const decryptedAESKey = crypto.privateDecrypt(
     {
-      key: privateKey, // Ensure this is the correct PKCS#8 private key
-      padding: crypto.constants.RSA_PKCS1_OAEP_PADDING, // Use OAEP padding
-      oaepHash: "sha256", // Match the hash algorithm used during encryption
+      key: privateKey,
+      padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+      oaepHash: "sha256",
     },
     encryptedAESKey
   );
-  req.session.aesKey = decryptedAESKey.toString("hex"); // Store securely in session
+  req.session.aesKey = decryptedAESKey.toString("hex");
   res.sendStatus(200);
 });
 
-// Function to call the C++ encryption program
 function encryptAESWithCPP(data, key, aad, iv) {
   return new Promise((resolve, reject) => {
-    // Convert inputs to Base64
+
     const dataBase64 = Buffer.from(data).toString("base64");
 
     const keyBase64 = Buffer.from(
@@ -280,23 +230,19 @@ function encryptAESWithCPP(data, key, aad, iv) {
 
     const ivBase64 = Buffer.from(ivHex, "hex").toString("base64");
 
-    // Execute the C++ program with parameters
     const cppProcess = spawn("./criptarebase64aesgcm.exe");
 
     let encryptedOutput = "";
     let errorOutput = "";
 
-    // Capture the program's output
     cppProcess.stdout.on("data", (chunk) => {
       encryptedOutput += chunk.toString();
     });
 
-    // Capture error output
     cppProcess.stderr.on("data", (chunk) => {
       errorOutput += chunk.toString();
     });
 
-    // Handle process completion
     cppProcess.on("close", (code) => {
       if (code !== 0) {
         reject(
@@ -305,7 +251,6 @@ function encryptAESWithCPP(data, key, aad, iv) {
           )
         );
       } else {
-        // If the C++ program ran successfully, parse the output
         let timeTakenSecond = 0;
         let authTagCpp = "";
         let encryptedmsg = "";
@@ -340,13 +285,12 @@ function encryptAESWithCPP(data, key, aad, iv) {
         // Resolve with the parsed values
         resolve({
           encryptedmsg, // Encrypted message as a Buffer
-          authTagCpp, // Authentication tag
-          timeTakenSecond, // Encryption time in milliseconds
+          authTagCpp,
+          timeTakenSecond,
         });
       }
     });
 
-    // Handle errors
     cppProcess.on("error", (err) => {
       reject(err);
     });
@@ -359,10 +303,9 @@ function encryptAESWithCPP(data, key, aad, iv) {
     cppProcess.stdin.end();
   });
 }
-// Function to call the C++ encryption program
 function decryptAESWithCPP(data, key, aad, iv, tag) {
   return new Promise((resolve, reject) => {
-    // Convert inputs to Base64
+
     const dataBase64 = Buffer.from(data).toString("base64");
 
     const keyBase64 = Buffer.from(
@@ -376,7 +319,6 @@ function decryptAESWithCPP(data, key, aad, iv, tag) {
     const ivBase64 = Buffer.from(ivHex, "utf-8").toString("base64");
     const tagBase64 = Buffer.from(tag).toString("base64");
 
-    // Execute the C++ program with parameters
     const cppProcess = spawn("./DEcriptarebase64aesgcm.exe");
 
     let encryptedOutput = "";
@@ -401,7 +343,6 @@ function decryptAESWithCPP(data, key, aad, iv, tag) {
           )
         );
       } else {
-        // If the C++ program ran successfully, parse the output
         let encryptedmsg = "";
 
         // Match for encrypted message
@@ -409,7 +350,6 @@ function decryptAESWithCPP(data, key, aad, iv, tag) {
         if (enctextmatch && enctextmatch[1]) {
           // Remove any unnecessary whitespace and concatenate lines
           const hexString = enctextmatch[1].replace(/\s+/g, "");
-          // Convert the hex string to a Buffer
           encryptedmsg = Buffer.from(hexString, "hex");
         }
 
@@ -420,7 +360,6 @@ function decryptAESWithCPP(data, key, aad, iv, tag) {
       }
     });
 
-    // Handle errors
     cppProcess.on("error", (err) => {
       reject(err);
     });
@@ -436,12 +375,12 @@ function decryptAESWithCPP(data, key, aad, iv, tag) {
 }
 
 function generateIV(sequenceNumber) {
-  // Allocate a 12-byte buffer
   const ivBuffer = Buffer.alloc(12);
-  // Write the sequence number into the last 4 bytes
+
   ivBuffer.writeUInt32BE(sequenceNumber, 8); // Position it at offset 8
   return ivBuffer.toString("hex");
 }
+
 app.post("/reset-session", (req, res) => {
   req.session.aesKey = null;
   req.session.sequenceNumber = 0;
@@ -562,7 +501,6 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
   const handleEncryption = (file, filename) => {
     // First Encryption: AES-GCM in Node.js
     const startFirstEncryption = process.hrtime();
-    // Check if the Base64 encoded data exceeds the size limit
 
     const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
 
@@ -576,19 +514,15 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
     console.log("First Encryption Auth Tag:", authTag);
     console.log(`First Encryption Time taken: ${timeTakenFirst} ms`);
 
-    // Convert the hex string to a Buffer
     const keyBuffer = Buffer.from(req.session.aesKey, "utf8");
-    // Encode the Buffer to a Base64 string
 
     const keyBase64 = keyBuffer.toString("base64");
 
     const aedBase64 = aed.toString("base64");
-    // Encode data, key, and AED using Base64
     const dataBase64 = Buffer.from(file).toString("base64");
     // Second Encryption: Using C++ program via stdin/stdout
     const cppProcess = spawn("criptarebased.exe");
 
-    // Write the Base64-encoded data, key, and AED to the C++ program via stdin
     cppProcess.stdin.write(dataBase64 + "\n");
     cppProcess.stdin.write(keyBase64 + "\n");
     cppProcess.stdin.write(aedBase64 + "\n");
@@ -759,10 +693,10 @@ app.post("/encrypt", async (req, res) => {
   // Decrypt using C++ program (same function as your login decryption)
   const decrypted = await decryptAESWithCPP(
     ciphertext,
-    aesKey, // Ensure aesKey is stored in the session
-    "", // AAD (optional)
+    aesKey,
+    "",
     ivBuffer,
-    tagBuffer // Pass the authentication tag
+    tagBuffer
   );
 
   const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
@@ -798,11 +732,8 @@ app.post("/encrypt", async (req, res) => {
   console.log("NodeJs Encryption Auth Tag:", authTag);
   console.log(`NodeJs Encryption Time taken: ${timeTakenFirst} ms`);
 
-  // Convert the hex string to a Buffer
   const keyBuffer = Buffer.from(req.session.aesKey, "utf-8");
 
-  // Encode the Buffer to a Base64 string
-  // Encode data, key, and AED using Base64
   const dataBase64 = Buffer.from(content, "utf-8").toString("base64");
 
   // Check if the Base64 encoded data exceeds the size limit
@@ -810,7 +741,7 @@ app.post("/encrypt", async (req, res) => {
   if (dataBase64.length > sizeLimit) {
     console.error("Error: Encoded data exceeds the size limit.");
     res
-      .status(413) // HTTP status code 413: Payload Too Large
+      .status(413)
       .send(
         "Content is too large to be encrypted. The encoded data exceeds the size limit."
       );
@@ -820,10 +751,8 @@ app.post("/encrypt", async (req, res) => {
   const keyBase64 = keyBuffer.toString("base64");
   const aedBase64 = aed.toString("base64");
 
-  // Second Encryption: Using C++ program via stdin/stdout
   const cppProcess = spawn("criptarebased.exe");
 
-  // Write the Base64-encoded data, key, and AED to the C++ program via stdin
   cppProcess.stdin.write(dataBase64 + "\n");
   cppProcess.stdin.write(keyBase64 + "\n");
   cppProcess.stdin.write(aedBase64 + "\n");
@@ -850,7 +779,6 @@ app.post("/encrypt", async (req, res) => {
       return;
     }
 
-    // If the C++ program ran successfully, continue with processing stdout
     let timeTakenSecond = 0;
     let authTagCpp = "";
     const timeMatch = stdoutData.match(/Encryption time: (\d+\.\d+) ms/);
@@ -1117,8 +1045,6 @@ app.get("/creare-bd", (req, res) => {
     );
   });
 });
-// Encryption analysis route
-// Encryption analysis route
 app.get("/encryption_analysis", (req, res) => {
   const username = req.cookies.username;
 
@@ -1399,13 +1325,11 @@ app.post("/encrypt-performance-test", (req, res) => {
 
 app.get("/inserare-bd", (req, res) => {
   db.serialize(() => {
-    // Connect to the database server and open a connection to the database
 
     if (db.err) throw db.err;
 
     console.log("Conexiunea la baza de date a fost realizată cu succes.");
 
-    // Insert multiple cocktails into the 'produse' table
     const cocktails = [
       { id: 6, nume: "Mojito", pret: 15.0 },
       { id: 7, nume: "Cosmopolitan", pret: 12.5 },
@@ -1428,7 +1352,6 @@ app.get("/inserare-bd", (req, res) => {
         }
       );
     });
-    // Redirect the client to "/"
     res.redirect("/");
   });
 });
@@ -1445,7 +1368,6 @@ db = new sqlite3.Database("cumparaturi.db", (err) => {
 app.get("/vizualizare-comenzi", (req, res) => {
   const username = req.cookies.username;
 
-  // Fetch the customer ID based on the username
   db.get(
     "SELECT id FROM customers WHERE name = ?",
     [username],
@@ -1514,10 +1436,10 @@ app.post("/sterge-comanda", async (req, res) => {
 
   const decrypted = await decryptAESWithCPP(
     ciphertext,
-    aesKey, 
-    "", 
+    aesKey,
+    "",
     ivBuffer,
-    tagBuffer 
+    tagBuffer
   );
 
   const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
@@ -1554,11 +1476,10 @@ app.post("/adaugare_cos", async (req, res) => {
   const tagBuffer = Buffer.from(tag, "base64");
   const aesKey = Buffer.from(req.session.aesKey, "hex");
 
-  // Decrypt using C++ program (same function as your login decryption)
   const decrypted = await decryptAESWithCPP(
     ciphertext,
     aesKey,
-    "", 
+    "",
     ivBuffer,
     tagBuffer
   );
@@ -1567,12 +1488,11 @@ app.post("/adaugare_cos", async (req, res) => {
   const formData = JSON.parse(decryptedMessageString);
 
   const productId = formData.id;
-  const quantityToAdd = 1; // The quantity that user wants to add to cart
+  const quantityToAdd = 1;
 
   db.serialize(() => {
-    db.run("BEGIN TRANSACTION;"); // Begin transaction to ensure atomic operations
+    db.run("BEGIN TRANSACTION;");
 
-    // Step 1: Check and update stock if available
     db.get(
       "SELECT stoc FROM produse WHERE id = ?",
       [productId],
@@ -1583,7 +1503,6 @@ app.post("/adaugare_cos", async (req, res) => {
         }
 
         if (product && product.stoc >= quantityToAdd) {
-          // Step 2: Update stock
           db.run(
             "UPDATE produse SET stoc = stoc - ? WHERE id = ? AND stoc >= ?",
             [quantityToAdd, productId, quantityToAdd],
@@ -1594,7 +1513,6 @@ app.post("/adaugare_cos", async (req, res) => {
                 return;
               }
 
-              // Proceed to add/update cart
               const username = req.cookies.username;
               db.get(
                 "SELECT id FROM customers WHERE name = ?",
@@ -1654,9 +1572,8 @@ app.post("/adaugare_cos", async (req, res) => {
             db.run("ROLLBACK;");
             return res.status(500).send("Database error checking cart item.");
           }
-    
+
           if (item) {
-            // If item exists, update its quantity
             const newQuantity = item.quantity + quantityToAdd;
             db.run(
               "UPDATE cart_item SET quantity = ? WHERE cart_id = ? AND product_id = ?",
@@ -1667,7 +1584,7 @@ app.post("/adaugare_cos", async (req, res) => {
                   return res.status(500).send("Database error updating cart item.");
                 }
                 db.run("COMMIT;");
-                res.redirect("/"); // Redirect after successful update
+                res.redirect("/");
               }
             );
           } else {
@@ -1681,7 +1598,7 @@ app.post("/adaugare_cos", async (req, res) => {
                   return res.status(500).send("Database error inserting new cart item.");
                 }
                 db.run("COMMIT;");
-                res.redirect("/"); 
+                res.redirect("/");
               }
             );
           }
@@ -1692,7 +1609,7 @@ app.post("/adaugare_cos", async (req, res) => {
 });
 
 app.post("/place-order", async (req, res) => {
-  const username = req.cookies.username; 
+  const username = req.cookies.username;
   if (!username) {
     return res
       .status(401)
@@ -1746,12 +1663,11 @@ app.post("/place-order", async (req, res) => {
               // Clear the cart after successfully placing the order
               db.run(
                 `DELETE FROM cart_item WHERE cart_id = ?`,
-                [cartItems[0].cart_id], // Assuming all items come from the same cart
+                [cartItems[0].cart_id],
                 (err) => {
                   if (err) {
                     return res.status(500).json({ message: "Error clearing cart items." });
                   }
-                  // Delete the cart itself
                   db.run(
                     `DELETE FROM cart WHERE id = ?`,
                     [cartItems[0].cart_id],
@@ -1789,213 +1705,212 @@ app.post("/update-cart", async (req, res) => {
   const tagBuffer = Buffer.from(tag, "base64");
   const aesKey = Buffer.from(req.session.aesKey, "hex");
 
-  // Decrypt using C++ program (same function as your login decryption)
   const decrypted = await decryptAESWithCPP(
     ciphertext,
-    aesKey, // Ensure aesKey is stored in the session
-    "", // AAD (optional)
+    aesKey,
+    "",
     ivBuffer,
-    tagBuffer // Pass the authentication tag
+    tagBuffer
   );
 
-  const decryptedMessageBuffer = decrypted.encryptedmsg; 
-  const decryptedMessageString = decryptedMessageBuffer.toString("utf-8"); 
-  const formData = JSON.parse(decryptedMessageString); 
+  const decryptedMessageBuffer = decrypted.encryptedmsg;
+  const decryptedMessageString = decryptedMessageBuffer.toString("utf-8");
+  const formData = JSON.parse(decryptedMessageString);
   console.log("decryptedMessageString: ", decryptedMessageString);
   console.log("FormData: ", formData);
-  const username = req.cookies.username; 
+  const username = req.cookies.username;
 
   if (!username) {
-    return res.redirect("/login"); 
+    return res.redirect("/login");
   }
 
-  
+
   db.get(
     "SELECT id FROM customers WHERE name = ?",
     [username],
     (err, customer) => {
-        if (err) {
-            console.error("Database error:", err);
-            return res.status(500).send("Internal server error");
-        }
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).send("Internal server error");
+      }
 
-        if (!customer) {
-            return res.status(404).send("Customer not found.");
-        }
+      if (!customer) {
+        return res.status(404).send("Customer not found.");
+      }
 
-        const updatePromises = [];
-        const deletePromises = [];
-var ok=0;
-        Object.keys(formData).forEach( async (key) => {
-            const [action, productId] = key.split("_");
-            if (action === "quantity") {
-                const quantity = parseInt(formData[key]);
+      const updatePromises = [];
+      const deletePromises = [];
+      var ok = 0;
+      Object.keys(formData).forEach(async (key) => {
+        const [action, productId] = key.split("_");
+        if (action === "quantity") {
+          const quantity = parseInt(formData[key]);
 
-                if (!isNaN(quantity) && quantity > 0) {
-                    db.get("SELECT id FROM cart WHERE customer_id = ?", [customer.id], (err, cart) => {
-                        if (err) {
-                            console.error("Error retrieving cart id:", err);
-                            return;
-                        }
+          if (!isNaN(quantity) && quantity > 0) {
+            db.get("SELECT id FROM cart WHERE customer_id = ?", [customer.id], (err, cart) => {
+              if (err) {
+                console.error("Error retrieving cart id:", err);
+                return;
+              }
 
-                        if (cart) {
-                          const updateCartItemAndStock =  (db, cartId, productId, requestedQuantity, customerId) => {
-                            return new Promise((resolve, reject) => {
-                               
-                        
-                                    db.get(`
+              if (cart) {
+                const updateCartItemAndStock = (db, cartId, productId, requestedQuantity, customerId) => {
+                  return new Promise((resolve, reject) => {
+
+
+                    db.get(`
                                         SELECT ci.quantity AS currentQuantity, p.stoc AS currentStock
                                         FROM cart_item ci
                                         JOIN produse p ON ci.product_id = p.id
                                         WHERE ci.cart_id = ? AND ci.product_id = ?
                                     `, [cartId, productId], (err, row) => {
-                                        if (err) {
-                                          if(ok==0){
-                                          ok=1;
-                                          db.run('ROLLBACK;');
-                                          }
-                                            
-                                            return reject("Error fetching current quantities");
-                                        }
-                        
-                                        const { currentQuantity, currentStock } = row;
-                                        let newStock;
-                        
-                                        if (requestedQuantity > currentQuantity) {
-                                            newStock = currentStock - (requestedQuantity - currentQuantity);
-                                            if (newStock < 0) {
-                                              if(ok==0){
-                                                ok=1;
-                                                db.run('ROLLBACK;');
-                                                }
-                                                return reject("There is not enough stock available");
-                                            }
-                                        } else {
-                                            newStock = currentStock + (currentQuantity - requestedQuantity);
-                                        }
-                        
-                                        db.run(`
+                      if (err) {
+                        if (ok == 0) {
+                          ok = 1;
+                          db.run('ROLLBACK;');
+                        }
+
+                        return reject("Error fetching current quantities");
+                      }
+
+                      const { currentQuantity, currentStock } = row;
+                      let newStock;
+
+                      if (requestedQuantity > currentQuantity) {
+                        newStock = currentStock - (requestedQuantity - currentQuantity);
+                        if (newStock < 0) {
+                          if (ok == 0) {
+                            ok = 1;
+                            db.run('ROLLBACK;');
+                          }
+                          return reject("There is not enough stock available");
+                        }
+                      } else {
+                        newStock = currentStock + (currentQuantity - requestedQuantity);
+                      }
+
+                      db.run(`
                                             UPDATE produse
                                             SET stoc = ?
                                             WHERE id = ?
                                         `, [newStock, productId], (err) => {
-                                            if (err) {
-                                              if(ok==0){
-                                                ok=1;
-                                                db.run('ROLLBACK;');
-                                                }
-                                                return reject("Error updating stock");
-                                            }
-                        
-                                            db.run(`
+                        if (err) {
+                          if (ok == 0) {
+                            ok = 1;
+                            db.run('ROLLBACK;');
+                          }
+                          return reject("Error updating stock");
+                        }
+
+                        db.run(`
                                                 UPDATE cart_item
                                                 SET quantity = ?
                                                 WHERE cart_id = ? AND product_id = ?
                                             `, [requestedQuantity, cartId, productId], (err) => {
-                                                if (err) {
-                                                  if(ok==0){
-                                                    ok=1;
-                                                    db.run('ROLLBACK;');
-                                                    }
-                                                    return reject("Error updating cart item");
-                                                }
-                        
-                                               
-                                                resolve();
+                          if (err) {
+                            if (ok == 0) {
+                              ok = 1;
+                              db.run('ROLLBACK;');
+                            }
+                            return reject("Error updating cart item");
+                          }
 
-                                            });
-                                        });
-                                    });
-                                
-                            });
-                        };
-                        
-                         updatePromises.push( updateCartItemAndStock(db, cart.id, parseInt(productId), quantity, customer.id)
-                        .catch((error) => {
-                            console.error("Error updating stock or cart item:", error);
-                        }));
-                       
-                        }
+
+                          resolve();
+
+                        });
+                      });
                     });
-                }
-            } else if (action === "delete") {
-                deletePromises.push(new Promise((resolve, reject) => {
-                        db.get(`
+
+                  });
+                };
+
+                updatePromises.push(updateCartItemAndStock(db, cart.id, parseInt(productId), quantity, customer.id)
+                  .catch((error) => {
+                    console.error("Error updating stock or cart item:", error);
+                  }));
+
+              }
+            });
+          }
+        } else if (action === "delete") {
+          deletePromises.push(new Promise((resolve, reject) => {
+            db.get(`
                             SELECT quantity
                             FROM cart_item
                             WHERE cart_id IN (SELECT id FROM cart WHERE customer_id = ?) AND product_id = ?
                         `, [customer.id, parseInt(productId)], (err, result) => {
-                            if (err) {
-                                db.run('ROLLBACK;');
-                                return reject("Error fetching current quantity");
-                            }
+              if (err) {
+                db.run('ROLLBACK;');
+                return reject("Error fetching current quantity");
+              }
 
-                            const { quantity } = result;
+              const { quantity } = result;
 
-                            db.run(`
+              db.run(`
                                 UPDATE produse
                                 SET stoc = stoc + ?
                                 WHERE id = ?
                             `, [quantity, parseInt(productId)], (err) => {
-                                if (err) {
-                                    db.run('ROLLBACK;');
-                                    return reject("Error updating stock");
-                                }
+                if (err) {
+                  db.run('ROLLBACK;');
+                  return reject("Error updating stock");
+                }
 
-                                db.run(`
+                db.run(`
                                     DELETE FROM cart_item
                                     WHERE cart_id IN (SELECT id FROM cart WHERE customer_id = ?) AND product_id = ?
                                 `, [customer.id, parseInt(productId)], (err) => {
-                                    if (err) {
-                                        db.run('ROLLBACK;');
-                                        return reject("Error deleting cart item");
-                                    }
-                                    resolve();
-                                });
-                            });
-                        });
-                   
-                }));
-            }
-        });
-        db.run('BEGIN TRANSACTION;', (err) => {
-          if (err) return reject("Error starting transaction");
+                  if (err) {
+                    db.run('ROLLBACK;');
+                    return reject("Error deleting cart item");
+                  }
+                  resolve();
+                });
+              });
+            });
+
+          }));
+        }
+      });
+      db.run('BEGIN TRANSACTION;', (err) => {
+        if (err) return reject("Error starting transaction");
 
         Promise.all([...updatePromises, ...deletePromises])
-        .then(() => {
-          if(ok==0){
-            db.run('COMMIT;', (err) => {
-              if (err) {
+          .then(() => {
+            if (ok == 0) {
+              db.run('COMMIT;', (err) => {
+                if (err) {
                   db.run('ROLLBACK;');
-              }
-          });
-        }
-        
-           })
-            .then(() => {
-                res.redirect("/vizualizare-cos");
-            })
-            .catch((error) => {
-                console.error("Error updating cart:", error);
-              db.run('ROLLBACK;');
+                }
+              });
+            }
 
-                res.status(500).send(error);
-            });
-            
+          })
+          .then(() => {
+            res.redirect("/vizualizare-cos");
+          })
+          .catch((error) => {
+            console.error("Error updating cart:", error);
+            db.run('ROLLBACK;');
+
+            res.status(500).send(error);
+          });
+
       });
 
-            
+
     }
-);
+  );
 });
 app.get("/vizualizare-cos", (req, res) => {
-  const username = req.cookies.username; 
+  const username = req.cookies.username;
 
   if (!username) {
-    return res.redirect("/login"); 
+    return res.redirect("/login");
   }
 
-  
+
   db.get(
     "SELECT id FROM customers WHERE name = ?",
     [username],
@@ -2003,7 +1918,6 @@ app.get("/vizualizare-cos", (req, res) => {
       if (err) throw err;
 
       if (customer) {
-        // Step 2: Retrieve the cart items for the customer
         db.all(
           `SELECT ci.product_id, ci.quantity, p.nume, p.pret FROM cart_item ci
          JOIN produse p ON ci.product_id = p.id
@@ -2016,13 +1930,11 @@ app.get("/vizualizare-cos", (req, res) => {
               return res.render("vizualizare-cos", { cart: [], total: 0 });
             }
 
-            // Step 3: Calculate the total
             let total = 0;
             cartItems.forEach((item) => {
               total += item.pret * item.quantity;
             });
 
-            // Step 4: Render the page with the cart items and total
             res.render("vizualizare-cos", {
               cart: cartItems,
               total: total.toFixed(2),
@@ -2069,13 +1981,13 @@ app.post("/verificare-autentificare", async (req, res) => {
   console.log("ciphertext: ", ciphertext);
   console.log("ivBuffer: ", ivBuffer);
   console.log("tagBuffer: ", tagBuffer);
-  // Decrypt using C++ program
+
   const decrypted = await decryptAESWithCPP(
     ciphertext,
-    aesKey, // Ensure aesKey is stored in the session
-    "", // AAD (optional)
+    aesKey, 
+    "", 
     ivBuffer,
-    tagBuffer // Pass the authentication tag
+    tagBuffer 
   );
 
   const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
@@ -2133,7 +2045,7 @@ app.post("/verificare-autentificare", async (req, res) => {
         const blockTime = failedLoginAttempts.get(username + "-blockTime");
         if (blockTime) {
           const currentTime = Date.now();
-          const blockDuration = 10000; // Block duration in milliseconds (e.g., 10 seconds)
+          const blockDuration = 10000; // Block duration in milliseconds (10 seconds)
           const timeSinceBlock = currentTime - blockTime;
           if (timeSinceBlock < blockDuration) {
             const timeLeft = blockDuration - timeSinceBlock;
@@ -2183,7 +2095,7 @@ app.post("/verificare-autentificare", async (req, res) => {
       const blockTime = failedLoginAttempts.get(username + "-blockTime");
       if (blockTime) {
         const currentTime = Date.now();
-        const blockDuration = 10000; // Block duration in milliseconds (e.g., 10 seconds)
+        const blockDuration = 10000; 
         const timeSinceBlock = currentTime - blockTime;
         if (timeSinceBlock < blockDuration) {
           const timeLeft = blockDuration - timeSinceBlock;
@@ -2198,7 +2110,6 @@ app.post("/verificare-autentificare", async (req, res) => {
           );
           return res.redirect("/autentificare");
         } else {
-          // Reset failed login attempts if the block duration has passed
           failedLoginAttempts.delete(username);
           failedLoginAttempts.delete(username + "-blockTime");
         }
@@ -2236,10 +2147,10 @@ app.post("/inregistrare", async (req, res) => {
   // Decrypt using C++ program
   const decrypted = await decryptAESWithCPP(
     ciphertext,
-    aesKey, // Ensure aesKey is stored in the session
-    "", // AAD (optional)
+    aesKey, 
+    "", 
     ivBuffer,
-    tagBuffer // Pass the authentication tag
+    tagBuffer 
   );
 
   const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
@@ -2249,13 +2160,12 @@ app.post("/inregistrare", async (req, res) => {
   // Check if the username already exists
   const userExists = users.some((user) => user.utilizator === username);
   if (userExists) {
-    // Render the registration page with an error message
     return res.render("inregistrare", {
       errorMessage: "Username already exists. Please choose another one.",
     });
   }
   // Hash the password
-  const saltRounds = 10; // Adjust the number of salt rounds as needed
+  const saltRounds = 10; 
   const hashedPassword = await bcrypt.hash(password, saltRounds);
   // Add new user with admin set to false
   const newUser = {
@@ -2281,7 +2191,6 @@ app.post("/inregistrare", async (req, res) => {
 
     console.log("Customer added to database:", username);
 
-    // Redirect to the login page after successful registration
     res.redirect("/autentificare");
   });
 });
@@ -2289,14 +2198,12 @@ app.post("/inregistrare", async (req, res) => {
 app.get("/upload_file", (req, res) => {
   res.render("upload_file");
 });
-// la accesarea din browser adresei http://localhost:6789/chestionar se va apela funcțiaspecificată
 app.get("/chestionar", (req, res) => {
   const fs = require("fs");
 
   // Read the contents of the JSON file
   const intrebariData = fs.readFileSync("intrebari.json");
   const listaIntrebari = JSON.parse(intrebariData);
-  // în fișierul views/chestionar.ejs este accesibilă variabila 'intrebari' careconține vectorul de întrebări
   res.render("chestionar", { intrebari: listaIntrebari });
 });
 app.post("/rezultat-chestionar", (req, res) => {
@@ -2307,11 +2214,10 @@ app.post("/rezultat-chestionar", (req, res) => {
   for (let i = 0; i < intrebari.length; i++) {
     const answer = req.body[`raspuns${i}`];
 
-    // Check if the answer exists; if not, handle it (e.g., set to null)
     if (answer) {
       raspunsuri.push(answer[0]); // If answer exists, push it to raspunsuri array
     } else {
-      raspunsuri.push(null); // If no answer, push null or handle as needed
+      raspunsuri.push(null); // If no answer, push null 
     }
   }
 
@@ -2347,13 +2253,12 @@ app.post("/admin/adauga-produs", async (req, res) => {
   const tagBuffer = Buffer.from(tag, "base64");
   const aesKey = Buffer.from(req.session.aesKey, "hex");
 
-  // Decrypt using C++ program (same function as your login decryption)
   const decrypted = await decryptAESWithCPP(
     ciphertext,
-    aesKey, // Ensure aesKey is stored in the session
-    "", // AAD (optional)
+    aesKey,
+    "", 
     ivBuffer,
-    tagBuffer // Pass the authentication tag
+    tagBuffer 
   );
 
   const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
@@ -2390,13 +2295,12 @@ app.post("/admin/update-stoc", async (req, res) => {
   const tagBuffer = Buffer.from(tag, "base64");
   const aesKey = Buffer.from(req.session.aesKey, "hex");
 
-  // Decrypt using C++ program (same function as your login decryption)
   const decrypted = await decryptAESWithCPP(
     ciphertext,
-    aesKey, // Ensure aesKey is stored in the session
-    "", // AAD (optional)
+    aesKey, 
+    "", 
     ivBuffer,
-    tagBuffer // Pass the authentication tag
+    tagBuffer 
   );
 
   const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
@@ -2428,13 +2332,12 @@ app.post("/admin/delete-produs", async (req, res) => {
   const tagBuffer = Buffer.from(tag, "base64");
   const aesKey = Buffer.from(req.session.aesKey, "hex");
 
-  // Decrypt using C++ program (same function as your login decryption)
   const decrypted = await decryptAESWithCPP(
     ciphertext,
-    aesKey, // Ensure aesKey is stored in the session
-    "", // AAD (optional)
+    aesKey, 
+    "", 
     ivBuffer,
-    tagBuffer // Pass the authentication tag
+    tagBuffer 
   );
 
   const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
@@ -2466,13 +2369,12 @@ app.post("/admin/update-pret", async (req, res) => {
   const tagBuffer = Buffer.from(tag, "base64");
   const aesKey = Buffer.from(req.session.aesKey, "hex");
 
-  // Decrypt using C++ program (same function as your login decryption)
   const decrypted = await decryptAESWithCPP(
     ciphertext,
-    aesKey, // Ensure aesKey is stored in the session
-    "", // AAD (optional)
+    aesKey, 
+    "", 
     ivBuffer,
-    tagBuffer // Pass the authentication tag
+    tagBuffer 
   );
 
   const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer

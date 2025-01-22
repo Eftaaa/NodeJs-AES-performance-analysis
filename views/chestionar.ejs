@@ -5,30 +5,31 @@
 </nav>
 <h1>Chestionar</h1>
 <form id="chestionarform" method="POST" action="/rezultat-chestionar">
-  <% for (let i = 0; i < intrebari.length; i++) { %>
-  <h3><%= intrebari[i].intrebare %></h3>
-  <% for (let j = 0; j < intrebari[i].variante.length; j++) { %>
-  <input type="radio" name="raspuns<%= i %>" value="<%= j %>" />
-  <%= intrebari[i].variante[j] %><br />
-  <% } %> <% } %>
-  <br />
-  <button type="submit">Trimite raspunsurile</button>
+  <% for (let i=0; i < intrebari.length; i++) { %>
+    <h3>
+      <%= intrebari[i].intrebare %>
+    </h3>
+    <% for (let j=0; j < intrebari[i].variante.length; j++) { %>
+      <input type="radio" name="raspuns<%= i %>" value="<%= j %>" />
+      <%= intrebari[i].variante[j] %><br />
+        <% } %>
+          <% } %>
+            <br />
+            <button type="submit">Trimite raspunsurile</button>
 </form>
 <script>
   document
     .getElementById("chestionarform")
     .addEventListener("submit", async function (event) {
-      event.preventDefault(); // Prevent the default form submission behavior
+      event.preventDefault();
 
       const form = event.target;
       const formData = new FormData(form);
 
       try {
-        // Convert form data to an object
         const formObject = Object.fromEntries(formData.entries());
         console.log("Submitting form data:", formObject);
 
-        // Send the POST request with the form data
         const response = await fetch(form.action, {
           method: "POST",
           headers: {
@@ -46,10 +47,8 @@
           throw new Error("Form submission failed");
         }
 
-        // Parse the encrypted response
         const { encryptedData, authTag, aad, iv } = await response.json();
 
-        // Decrypt and handle the content
         const decryptedData = await decryptData(
           encryptedData,
           aesKey,
@@ -60,7 +59,6 @@
 
         console.log("Decrypted response data:", decryptedData);
 
-        // If it's a redirect, handle it
         const parsedData = JSON.parse(decryptedData);
         if (parsedData.isRedirect) {
           await loadEncryptedContent(parsedData.url);
@@ -79,7 +77,6 @@
             });
           });
 
-          // Execute any scripts in the new content
           const scripts = document.querySelectorAll("script");
           scripts.forEach((script) => {
             const newScript = document.createElement("script");

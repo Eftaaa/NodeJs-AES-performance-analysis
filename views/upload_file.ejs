@@ -94,9 +94,8 @@
       }
 
       const file = fileInput.files[0];
-      const maxBase64Size = 0x1fffffe8; // Maximum allowed size in base64 (approx 536.87 MB)
+      const maxBase64Size = 0x1fffffe8; // Marimea maxima permisa in base64 (approx 536.87 MB)
 
-      // Calculate the Base64 size
       const fileSize = file.size;
       const base64Size = Math.ceil((fileSize * 4) / 3);
 

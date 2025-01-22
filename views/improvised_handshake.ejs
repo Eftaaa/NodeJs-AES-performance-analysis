@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html id="content">
-  <head>
-    <title>Secure Layout</title>
-  </head>
-  <body>
-    <div id="content">Loading...</div>
-    <!-- Placeholder for encrypted content -->
-  </body>
+
+<head>
+  <title>Secure Layout</title>
+</head>
+
+<body>
+  <div id="content">Loading...</div>
+</body>
+
 </html>
 <script>
   let aesKey;
@@ -63,16 +65,14 @@
   }
 
   function decodeHexTag(base64Tag) {
-    // Step 1: Decode the Base64 string into a regular string
     const hexString = atob(base64Tag);
 
-    // Step 2: Split the string into hex values (space-separated)
     const hexArray = hexString.split(" ");
 
-    // Step 3: Convert hex values to raw bytes
+    //Convert hex values to raw bytes
     const byteArray = hexArray.map((hex) => parseInt(hex, 16));
 
-    // Step 4: Create a Uint8Array from the byte array
+    //Create a Uint8Array from the byte array
     return new Uint8Array(byteArray);
   }
 
@@ -95,14 +95,12 @@
     };
 
     try {
-      // Convert inputs to Uint8Array
       const keyBuffer = hexToUint8Array(aesKey);
       const ivBuffer = hexToUint8Array(iv);
       const aadBuffer = base64ToUint8Array(aad);
       const encryptedBuffer = base64ToUint8Array(encryptedData);
       const tagBuffer = decodeHexTag(tag);
 
-      // Combine encrypted data with the tag
       const dataWithTag = new Uint8Array(
         encryptedBuffer.length + tagBuffer.length
       );
@@ -128,7 +126,7 @@
           name: "AES-GCM",
           iv: ivBuffer,
           additionalData: aadBuffer,
-          tagLength: 128, // Tag length in bits (16 bytes)
+          tagLength: 128,
         },
 
         cryptoKey,
@@ -143,7 +141,7 @@
       console.error("Decryption failed with error:", error.message);
       console.error("Detailed error:", error);
 
-      // Log the specific details to help identify the issue
+      // Logs for debugging
       console.error("AES Key:", aesKey);
       console.error("IV:", iv);
       console.error("AAD:", aad);
@@ -181,12 +179,12 @@
       if (parsedecryptedData.isRedirect) {
         console.log("Parsed data:", url);
         console.log("Redirecting to:", parsedecryptedData.url);
-        await loadEncryptedContent(parsedecryptedData.url); // Handle the redirect securely
+        await loadEncryptedContent(parsedecryptedData.url);
         history.pushState(null, "", parsedecryptedData.url); // Update browser history
         return;
       }
 
-      
+
       const parser = new DOMParser();
       const doc = parser.parseFromString(parsedecryptedData.data, "text/html");
 
@@ -208,7 +206,6 @@
       const scripts = doc.querySelectorAll("script");
       scripts.forEach((script) => {
         if (script.src) {
-          // External script
           const newScript = document.createElement("script");
           newScript.src = script.src;
           newScript.defer = true; // Ensure it loads after parsing
@@ -254,6 +251,5 @@
     navigator.sendBeacon("/reset-session");
   });
 
-  // Start secure session on page load
   document.addEventListener("DOMContentLoaded", initializeSecureSession);
 </script>

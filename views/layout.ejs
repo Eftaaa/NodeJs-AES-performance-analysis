@@ -1,160 +1,113 @@
 <html id="content">
-  <head>
-    <% var pageTitle='Chestionar online' %>
-    <meta charset="utf-8" />
-    <title><%= pageTitle %></title>
-    <link rel="stylesheet" type="text/css" href="../stil.css" />
-  </head>
 
-  <body>
-    <nav class="nav">
-      <ul>
-        <li><a href="/" class="active">Demo Page</a></li>
-        <li><a href="upload_file">Upload File</a></li>
-        <li><a href="/encryption_analysis">Encryption speed analysis</a></li>
-        <% if (username == null) { %>
+<head>
+  <% var pageTitle='Chestionar online' %>
+    <meta charset="utf-8" />
+    <title>
+      <%= pageTitle %>
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stil.css" />
+</head>
+
+<body>
+  <nav class="nav">
+    <ul>
+      <li><a href="/" class="active">Demo Page</a></li>
+      <li><a href="upload_file">Upload File</a></li>
+      <li><a href="/encryption_analysis">Encryption speed analysis</a></li>
+      <% if (username==null) { %>
         <li><a href="/autentificare">Login</a></li>
         <li><a href="/inregistrare">Sign up</a></li>
         <% } %>
-      </ul>
-      <% if (username != null) { %>
+    </ul>
+    <% if (username !=null) { %>
       <h1>Bine ai venit, <%= username %>!</h1>
       <p>
-        Autentificat ca <b><%= username %></b> |
+        Autentificat ca <b>
+          <%= username %>
+        </b> |
         <a href="/autentificare">Deconectare</a>
       </p>
       <% } %>
-    </nav>
+  </nav>
 
-    <main>
-      <div class="container-cr">
-        <div class="header-container">
-          <h2>Encryption Methods:</h2>
-          <p>Node.Js AES-GCM Encryption (Program 1)</p>
-          <p>C++ AES-GCM Encryption (Program 2)</p>
-          <button id="encryptButton">Encrypt Page</button>
-        </div>
+  <main>
+    <div class="container-cr">
+      <div class="header-container">
+        <h2>Encryption Methods:</h2>
+        <p>Node.Js AES-GCM Encryption (Program 1)</p>
+        <p>C++ AES-GCM Encryption (Program 2)</p>
+        <button id="encryptButton">Encrypt Page</button>
       </div>
+    </div>
 
-      <div class="site-demo"><%- body %></div>
+    <div class="site-demo"><%- body %></div>
 
-      <div class="Statistici">
-        <h3>Encryption Statistics</h3>
-        <div id="encryptionStats"></div>
-      </div>
-      <script>
-        document
-          .getElementById("encryptButton")
-          .addEventListener("click", async function () {
-            try {
-              const siteDemoContent =
-                document.querySelector(".site-demo").innerHTML;
-              const plaintext = JSON.stringify(siteDemoContent);
-
-              // Generate a random IV (12 bytes for AES-GCM)
-              const IV = crypto.getRandomValues(new Uint8Array(12));
-
-              // Encode the plaintext as a Uint8Array
-              const encoder = new TextEncoder();
-              const plaintextBytes = encoder.encode(plaintext);
-
-              // Import the raw key data into a CryptoKey object
-              const aesKeyData = await crypto.subtle.importKey(
-                "raw", // Raw key format
-                aesKey, // Raw key data
-                { name: "AES-GCM" }, // AES-GCM encryption algorithm
-                false, // The key is not extractable
-                ["encrypt", "decrypt"] // Key usage
-              );
-
-              // Encrypt the plaintext
-              const encryptedDataBuffer = await crypto.subtle.encrypt(
-                { name: "AES-GCM", iv: IV },
-                aesKeyData,
-                plaintextBytes
-              );
-
-              // Extract ciphertext and authentication tag from the encrypted buffer
-              const encryptedBytes = new Uint8Array(encryptedDataBuffer);
-              const ciphertext = encryptedBytes.slice(0, -16); // Ciphertext (everything except the last 16 bytes)
-              const tag = encryptedBytes.slice(-16); // Authentication tag (last 16 bytes)
-
-              // Convert ciphertext and tag to Base64
-              const ciphertextBase64 = btoa(String.fromCharCode(...ciphertext));
-              const tagBase64 = btoa(String.fromCharCode(...tag));
-              const ivBase64 = btoa(String.fromCharCode(...IV));
-
-              console.log("Sending encrypted data to server:", {
-                encryptedData: ciphertextBase64,
-                iv: ivBase64,
-                tag: tagBase64, // Send tag as Base64
-              });
-
-              // Send the encrypted data to the server
-              const response = await fetch("/encrypt", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  encryptedData: ciphertextBase64,
-                  IV: ivBase64,
-                  tag: tagBase64,
-                }),
-              });
-              // Parse the server response
-              const { encryptedData, authTag, aad, iv } = await response.json();
-
-              // Decrypt the response
-              const decryptedData = await decryptData(
-                encryptedData,
-                aesKey,
-                iv,
-                aad,
-                authTag
-              );
-              console.log("Decrypted received data:", decryptedData);
-
-              // Parse decrypted data
-              const parsedData = JSON.parse(decryptedData);
-
-              if (response.status === 401) {
-                alert("You must be logged in to perform this action.");
-                loadEncryptedContent("/autentificare");
-                return;
-              } else if (!response.ok) {
-                throw new Error("Error during encryption");
-              }
-
-              const data = parsedData.data;
-              console.log("Success:", data);
-
-              // Fetch updated encryption stats
-              fetchEncryptionStats();
-            } catch (error) {
-              console.error("Error:", error);
-            }
-          });
-
-        async function fetchEncryptionStats() {
+    <div class="Statistici">
+      <h3>Encryption Statistics</h3>
+      <div id="encryptionStats"></div>
+    </div>
+    <script>
+      document
+        .getElementById("encryptButton")
+        .addEventListener("click", async function () {
           try {
-            const response = await fetch("/encryption-stats");
+            const siteDemoContent =
+              document.querySelector(".site-demo").innerHTML;
+            const plaintext = JSON.stringify(siteDemoContent);
 
-            // Check if the response indicates an unauthorized user
-            if (response.status === 401) {
-              const statsDiv = document.getElementById("encryptionStats");
-              statsDiv.innerHTML =
-                "<p>You must be logged in to view encryption statistics.</p>";
-              return;
-            }
-            if (!response.ok) {
-              throw new Error("Error fetching encryption statistics");
-            }
+            const IV = crypto.getRandomValues(new Uint8Array(12));
 
-            const data = await response.json();
-            const { encryptedData, authTag, aad, iv } = data;
+            const encoder = new TextEncoder();
+            const plaintextBytes = encoder.encode(plaintext);
 
-            // Decrypt the data
+            // Import the raw key data into a CryptoKey object
+            const aesKeyData = await crypto.subtle.importKey(
+              "raw", // Raw key format
+              aesKey, // Raw key data
+              { name: "AES-GCM" }, // AES-GCM encryption algorithm
+              false, // The key is not extractable
+              ["encrypt", "decrypt"] // Key usage
+            );
+
+            const encryptedDataBuffer = await crypto.subtle.encrypt(
+              { name: "AES-GCM", iv: IV },
+              aesKeyData,
+              plaintextBytes
+            );
+
+            // Extract ciphertext and authentication tag from the encrypted buffer
+            const encryptedBytes = new Uint8Array(encryptedDataBuffer);
+            const ciphertext = encryptedBytes.slice(0, -16);
+            const tag = encryptedBytes.slice(-16);
+
+            // Convert ciphertext and tag to Base64
+            const ciphertextBase64 = btoa(String.fromCharCode(...ciphertext));
+            const tagBase64 = btoa(String.fromCharCode(...tag));
+            const ivBase64 = btoa(String.fromCharCode(...IV));
+
+            console.log("Sending encrypted data to server:", {
+              encryptedData: ciphertextBase64,
+              iv: ivBase64,
+              tag: tagBase64,
+            });
+
+            // Send the encrypted data to the server
+            const response = await fetch("/encrypt", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                encryptedData: ciphertextBase64,
+                IV: ivBase64,
+                tag: tagBase64,
+              }),
+            });
+            // Parse the server response
+            const { encryptedData, authTag, aad, iv } = await response.json();
+
+            // Decrypt the response
             const decryptedData = await decryptData(
               encryptedData,
               aesKey,
@@ -162,20 +115,69 @@
               aad,
               authTag
             );
+            console.log("Decrypted received data:", decryptedData);
 
-            // Convert the decrypted string into JSON
+            // Parse decrypted data
             const parsedData = JSON.parse(decryptedData);
-            const realdata = JSON.parse(parsedData.data);
 
-            const statsDiv = document.getElementById("encryptionStats");
-            if (realdata.length === 0) {
-              statsDiv.innerHTML = "<p>No encryption statistics available.</p>";
+            if (response.status === 401) {
+              alert("You must be logged in to perform this action.");
+              loadEncryptedContent("/autentificare");
               return;
+            } else if (!response.ok) {
+              throw new Error("Error during encryption");
             }
 
-            // Create and populate the table
-            const table = document.createElement("table");
-            table.innerHTML = `
+            const data = parsedData.data;
+            console.log("Success:", data);
+
+            // Fetch updated encryption stats
+            fetchEncryptionStats();
+          } catch (error) {
+            console.error("Error:", error);
+          }
+        });
+
+      async function fetchEncryptionStats() {
+        try {
+          const response = await fetch("/encryption-stats");
+
+          // Check if the response indicates an unauthorized user
+          if (response.status === 401) {
+            const statsDiv = document.getElementById("encryptionStats");
+            statsDiv.innerHTML =
+              "<p>You must be logged in to view encryption statistics.</p>";
+            return;
+          }
+          if (!response.ok) {
+            throw new Error("Error fetching encryption statistics");
+          }
+
+          const data = await response.json();
+          const { encryptedData, authTag, aad, iv } = data;
+
+          // Decrypt the data
+          const decryptedData = await decryptData(
+            encryptedData,
+            aesKey,
+            iv,
+            aad,
+            authTag
+          );
+
+          // Convert the decrypted string into JSON
+          const parsedData = JSON.parse(decryptedData);
+          const realdata = JSON.parse(parsedData.data);
+
+          const statsDiv = document.getElementById("encryptionStats");
+          if (realdata.length === 0) {
+            statsDiv.innerHTML = "<p>No encryption statistics available.</p>";
+            return;
+          }
+
+          // Create and populate the table
+          const table = document.createElement("table");
+          table.innerHTML = `
           <tr>
             <th>Node.Js Encryption Time (ms)</th>
             <th>C++ Encryption Time (ms)</th>
@@ -184,60 +186,61 @@
           </tr>
         `;
 
-            realdata.forEach((row) => {
-              const tr = document.createElement("tr");
-              tr.innerHTML = `
+          realdata.forEach((row) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
             <td>${row.first_encryption_time}</td>
             <td>${row.second_encryption_time}</td>
             <td>${new Date(row.timestamp).toLocaleString()}</td>
             <td>${row.name ? row.name : ""}</td>
           `;
-              table.appendChild(tr);
-            });
+            table.appendChild(tr);
+          });
 
-            statsDiv.innerHTML = "";
-            statsDiv.appendChild(table);
-          } catch (error) {
-            console.error("Error:", error);
-          }
+          statsDiv.innerHTML = "";
+          statsDiv.appendChild(table);
+        } catch (error) {
+          console.error("Error:", error);
         }
+      }
 
-        fetchEncryptionStats();
-      </script>
-      <div id="floatingMessage" class="hidden">
-        <span id="messageIcon"></span>
-        <span id="messageText"></span>
-      </div>
-      <script>
-        function showFloatingMessage(message, type = "success") {
-          const floatingMessage = document.getElementById("floatingMessage");
-          const messageText = document.getElementById("messageText");
-          const messageIcon = document.getElementById("messageIcon");
+      fetchEncryptionStats();
+    </script>
+    <div id="floatingMessage" class="hidden">
+      <span id="messageIcon"></span>
+      <span id="messageText"></span>
+    </div>
+    <script>
+      function showFloatingMessage(message, type = "success") {
+        const floatingMessage = document.getElementById("floatingMessage");
+        const messageText = document.getElementById("messageText");
+        const messageIcon = document.getElementById("messageIcon");
 
-          // Remove existing type classes
-          floatingMessage.className = "";
-          messageIcon.className = "";
+        // Remove existing type classes
+        floatingMessage.className = "";
+        messageIcon.className = "";
 
-          // Add new type class
-          floatingMessage.classList.add(type);
-          messageIcon.classList.add(type);
+        // Add new type class
+        floatingMessage.classList.add(type);
+        messageIcon.classList.add(type);
 
-          // Update message text
-          messageText.textContent = message;
+        // Update message text
+        messageText.textContent = message;
 
-          // Show the message
-          floatingMessage.classList.remove("hidden");
+        // Show the message
+        floatingMessage.classList.remove("hidden");
 
-          // Hide the message after 3 seconds
-          setTimeout(() => {
-            floatingMessage.classList.add("hidden");
-          }, 3000);
-        }
-      </script>
-    </main>
+        // Hide the message after 3 seconds
+        setTimeout(() => {
+          floatingMessage.classList.add("hidden");
+        }, 3000);
+      }
+    </script>
+  </main>
 
-    <footer>
-      <p>&copy; 2023 Eftasiu David.</p>
-    </footer>
-  </body>
+  <footer>
+    <p>&copy; 2023 Eftasiu David.</p>
+  </footer>
+</body>
+
 </html>
