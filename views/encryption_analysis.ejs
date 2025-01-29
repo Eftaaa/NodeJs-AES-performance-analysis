@@ -35,7 +35,7 @@
                       <% } %>
 
    // Node.js encryption
-  const nodeMin = 50000;     // Start size
+            const nodeMin = 50000;     // Start size
             const nodeMax = 2000000;   // Extend to larger sizes
             const nodeStep = 50000;    // Same step size as C++ for consistent data points
 
@@ -161,7 +161,7 @@
           if (dataAvailable) { %>
               // Fetch the performance data passed from the server
               if (typeof performanceData === "undefined") {
-              var performanceData = <% - JSON.stringify(performanceData) %>;
+              var performanceData = <%- JSON.stringify(performanceData) %>;
               // Prepare the data for Chart.js
               let labels = performanceData.map((item) => item.char_length);
               let nodejsTimes = performanceData.map(
@@ -234,7 +234,7 @@
               }
             } else {
               // Update performanceData with new values
-              performanceData = <% - JSON.stringify(performanceData) %>;
+              performanceData = <%- JSON.stringify(performanceData) %>;
               // Prepare the data for Chart.js
               labels = performanceData.map((item) => item.char_length);
               nodejsTimes = performanceData.map(

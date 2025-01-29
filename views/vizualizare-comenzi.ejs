@@ -32,8 +32,8 @@
                 <% }); %>
             </td>
             <td>
-              <form action="/sterge-comanda" method="POST" id="deleteForm-<%= order.id %>"">
-          <input type=" hidden" name="order_id" value="<%= order.id %>" />
+              <form action="/sterge-comanda" method="POST" id="deleteForm-<%= order.id %>">
+            <input type="hidden" name="order_id" value="<%= order.id %>" />
               <button type="submit" class="btn">Șterge Comanda</button>
               </form>
             </td>

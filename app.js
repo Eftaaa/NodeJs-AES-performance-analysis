@@ -1611,84 +1611,84 @@ app.post("/adaugare_cos", async (req, res) => {
 app.post("/place-order", async (req, res) => {
   const username = req.cookies.username;
   if (!username) {
-    return res
-      .status(401)
-      .json({ message: "You must be logged in to place an order." });
+    return res.status(401).json({ message: "You must be logged in to place an order." });
   }
 
-  db.get("SELECT id FROM customers WHERE name = ?", [username], (err, customer) => {
-    if (err) {
-      return res.status(500).json({ message: "Database error while finding the customer." });
-    }
-    if (!customer) {
-      return res.status(404).json({ message: "Customer not found." });
-    }
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION;");
 
-    const customerId = customer.id;
+    db.get("SELECT id FROM customers WHERE name = ?", [username], (err, customer) => {
+      if (err) {
+        return res.status(500).json({ message: "Database error while finding the customer." });
+      }
+      if (!customer) {
+        return res.status(404).json({ message: "Customer not found." });
+      }
 
-    // Retrieve all cart items for the customer
-    db.all(
-      `SELECT ci.product_id, ci.quantity
-       FROM cart_item ci 
-       JOIN cart c ON ci.cart_id = c.id 
-       WHERE c.customer_id = ?`,
-      [customerId],
-      (err, cartItems) => {
-        if (err) {
-          return res.status(500).json({ message: "Database error while selecting cart items." });
+      const customerId = customer.id;
+
+      db.get("SELECT id FROM cart WHERE customer_id = ?", [customerId], (err, cart) => {
+        if (err || !cart) {
+          db.run("ROLLBACK;");
+          return res.status(500).json({ message: "Error finding cart." });
         }
 
-        // Insert into orders table
-        db.run("INSERT INTO orders (customer_id) VALUES (?)", [customerId], function (err) {
-          if (err) {
-            return res.status(500).json({ message: "Database error while inserting order." });
-          }
+        const cartId = cart.id;
 
-          const orderId = this.lastID;
+        db.all(
+          "SELECT product_id, quantity FROM cart_item WHERE cart_id = ?", [cartId],
+          (err, cartItems) => {
+            if (err) {
+              db.run("ROLLBACK;");
+              return res.status(500).json({ message: "Database error while selecting cart items." });
+            }
 
-          // Insert into order_item table
-          const orderItemQueries = cartItems.map(
-            (item) =>
-              new Promise((resolve, reject) => {
-                db.run(
-                  `INSERT INTO order_item (order_id, product_id, quantity) VALUES (?, ?, ?)`,
-                  [orderId, item.product_id, item.quantity],
-                  (err) => (err ? reject(err) : resolve())
-                );
-              })
-          );
+            db.run("INSERT INTO orders (customer_id) VALUES (?)", [customerId], function (err) {
+              if (err) {
+                db.run("ROLLBACK;");
+                return res.status(500).json({ message: "Database error while inserting order." });
+              }
 
-          Promise.all(orderItemQueries)
-            .then(() => {
-              // Clear the cart after successfully placing the order
-              db.run(
-                `DELETE FROM cart_item WHERE cart_id = ?`,
-                [cartItems[0].cart_id],
-                (err) => {
+              const orderId = this.lastID;
+
+              const insertPromises = cartItems.map(item =>
+                new Promise((resolve, reject) => {
+                  db.run(
+                    "INSERT INTO order_item (order_id, product_id, quantity) VALUES (?, ?, ?)",
+                    [orderId, item.product_id, item.quantity],
+                    (err) => (err ? reject(err) : resolve())
+                  );
+                })
+              );
+
+              Promise.all(insertPromises).then(() => {
+                db.run("DELETE FROM cart_item WHERE cart_id = ?", [cartId], (err) => {
                   if (err) {
+                    db.run("ROLLBACK;");
                     return res.status(500).json({ message: "Error clearing cart items." });
                   }
-                  db.run(
-                    `DELETE FROM cart WHERE id = ?`,
-                    [cartItems[0].cart_id],
-                    (err) => {
-                      if (err) {
-                        return res.status(500).json({ message: "Error deleting cart." });
-                      }
-                      res.json({ message: "Order placed successfully!" });
+                  db.run("DELETE FROM cart WHERE id = ?", [cartId], (err) => {
+                    if (err) {
+                      db.run("ROLLBACK;");
+                      return res.status(500).json({ message: "Error deleting cart." });
                     }
-                  );
-                }
-              );
-            })
-            .catch((error) => {
-              res.status(500).json({ message: "Error processing the order: " + error });
+                    db.run("COMMIT;");
+                    res.json({ message: "Order placed successfully!" });
+                  });
+                });
+              }).catch((error) => {
+                db.run("ROLLBACK;");
+                res.status(500).json({ message: "Error processing the order: " + error });
+              });
             });
-        });
-      }
-    );
+          }
+        );
+      });
+    });
   });
 });
+
+
 app.post("/update-cart", async (req, res) => {
   const { encryptedData, iv, tag } = req.body;
 
@@ -1835,8 +1835,7 @@ app.post("/update-cart", async (req, res) => {
           }
         } else if (action === "delete") {
           deletePromises.push(new Promise((resolve, reject) => {
-            db.get(`
-                            SELECT quantity
+            db.get(`SELECT quantity
                             FROM cart_item
                             WHERE cart_id IN (SELECT id FROM cart WHERE customer_id = ?) AND product_id = ?
                         `, [customer.id, parseInt(productId)], (err, result) => {
@@ -1844,7 +1843,6 @@ app.post("/update-cart", async (req, res) => {
                 db.run('ROLLBACK;');
                 return reject("Error fetching current quantity");
               }
-
               const { quantity } = result;
 
               db.run(`
@@ -1984,10 +1982,10 @@ app.post("/verificare-autentificare", async (req, res) => {
 
   const decrypted = await decryptAESWithCPP(
     ciphertext,
-    aesKey, 
-    "", 
+    aesKey,
+    "",
     ivBuffer,
-    tagBuffer 
+    tagBuffer
   );
 
   const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
@@ -2095,7 +2093,7 @@ app.post("/verificare-autentificare", async (req, res) => {
       const blockTime = failedLoginAttempts.get(username + "-blockTime");
       if (blockTime) {
         const currentTime = Date.now();
-        const blockDuration = 10000; 
+        const blockDuration = 10000;
         const timeSinceBlock = currentTime - blockTime;
         if (timeSinceBlock < blockDuration) {
           const timeLeft = blockDuration - timeSinceBlock;
@@ -2147,10 +2145,10 @@ app.post("/inregistrare", async (req, res) => {
   // Decrypt using C++ program
   const decrypted = await decryptAESWithCPP(
     ciphertext,
-    aesKey, 
-    "", 
+    aesKey,
+    "",
     ivBuffer,
-    tagBuffer 
+    tagBuffer
   );
 
   const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
@@ -2165,7 +2163,7 @@ app.post("/inregistrare", async (req, res) => {
     });
   }
   // Hash the password
-  const saltRounds = 10; 
+  const saltRounds = 10;
   const hashedPassword = await bcrypt.hash(password, saltRounds);
   // Add new user with admin set to false
   const newUser = {
@@ -2256,9 +2254,9 @@ app.post("/admin/adauga-produs", async (req, res) => {
   const decrypted = await decryptAESWithCPP(
     ciphertext,
     aesKey,
-    "", 
+    "",
     ivBuffer,
-    tagBuffer 
+    tagBuffer
   );
 
   const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
@@ -2297,10 +2295,10 @@ app.post("/admin/update-stoc", async (req, res) => {
 
   const decrypted = await decryptAESWithCPP(
     ciphertext,
-    aesKey, 
-    "", 
+    aesKey,
+    "",
     ivBuffer,
-    tagBuffer 
+    tagBuffer
   );
 
   const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
@@ -2334,10 +2332,10 @@ app.post("/admin/delete-produs", async (req, res) => {
 
   const decrypted = await decryptAESWithCPP(
     ciphertext,
-    aesKey, 
-    "", 
+    aesKey,
+    "",
     ivBuffer,
-    tagBuffer 
+    tagBuffer
   );
 
   const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
@@ -2371,10 +2369,10 @@ app.post("/admin/update-pret", async (req, res) => {
 
   const decrypted = await decryptAESWithCPP(
     ciphertext,
-    aesKey, 
-    "", 
+    aesKey,
+    "",
     ivBuffer,
-    tagBuffer 
+    tagBuffer
   );
 
   const decryptedMessageBuffer = decrypted.encryptedmsg; // Extract the Buffer
