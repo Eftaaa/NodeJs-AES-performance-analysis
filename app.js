@@ -1144,6 +1144,12 @@ app.post("/encrypt-performance-test", (req, res) => {
 
   const { nodeMin, nodeMax, nodeStep, cppMin, cppMax, cppStep } = req.body;
 
+
+  if (userProgress[username] && userProgress[username].running) {
+    return sendResponse(429, "running");
+  }
+  userProgress[username] = { running: true, progress: 0 };
+
   if (
     ![nodeMin, nodeMax, nodeStep, cppMin, cppMax, cppStep].every(
       (val) => Number.isInteger(val) && val >= 0
@@ -1166,11 +1172,9 @@ app.post("/encrypt-performance-test", (req, res) => {
     );
   }
 
-  if (userProgress[username] && userProgress[username].running) {
-    return sendResponse(429, "running");
-  }
+  
 
-  userProgress[username] = { running: true, progress: 0 };
+  
 
   const key = Buffer.from(req.session.aesKey, "hex");
   const iv = Buffer.alloc(12, 0);
@@ -1253,7 +1257,7 @@ app.post("/encrypt-performance-test", (req, res) => {
                     return reject(new Error("C++ encryption error"));
                   }
                   const match = stdoutData.match(
-                    /Encryption time: (\d+\.\d+) ms/
+                    /Encryption time: (\d+(?:\.\d+)?) ms/
                   );
                   const timeTaken = match ? parseFloat(match[1]) : 0;
                   const result = results.get(charLength) || {

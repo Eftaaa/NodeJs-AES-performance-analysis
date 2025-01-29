@@ -11,6 +11,24 @@
       </p>
       <% } %>
 
+      <label for="nodeMin">Node.js Min Size:</label>
+      <input type="number" id="nodeMin" name="nodeMin" value="50000" min="1" step="1" required>
+  
+      <label for="nodeMax">Node.js Max Size:</label>
+      <input type="number" id="nodeMax" name="nodeMax" value="2000000" min="1" step="1" required>
+  
+      <label for="nodeStep">Node.js Step Size:</label>
+      <input type="number" id="nodeStep" name="nodeStep" value="50000" min="1" step="1" required>
+  
+      <label for="cppMin">C++ Min Size:</label>
+      <input type="number" id="cppMin" name="cppMin" value="50000" min="1" step="1" required>
+  
+      <label for="cppMax">C++ Max Size:</label>
+      <input type="number" id="cppMax" name="cppMax" value="2000000" min="1" step="1" required>
+  
+      <label for="cppStep">C++ Step Size:</label>
+      <input type="number" id="cppStep" name="cppStep" value="50000" min="1" step="1" required>
+
         <div id="progressContainer" style="display: none">
           <p>Progress: <span id="progressText">0%</span></p>
           <progress id="progressBar" value="0" max="100"></progress>
@@ -34,16 +52,18 @@
               return;
                       <% } %>
 
-   // Node.js encryption
-            const nodeMin = 50000;     // Start size
-            const nodeMax = 2000000;   // Extend to larger sizes
-            const nodeStep = 50000;    // Same step size as C++ for consistent data points
-
-            // C++ encryption
-            const cppMin = 50000;      // Match starting size with Node.js
-            const cppMax = 2000000;    // Extend to same max as Node.js
-            const cppStep = 50000;     // Same step size as Node.js
-
+              const nodeMin = parseInt(document.getElementById('nodeMin').value, 10);
+              const nodeMax = parseInt(document.getElementById('nodeMax').value, 10);
+              const nodeStep = parseInt(document.getElementById('nodeStep').value, 10);
+              const cppMin = parseInt(document.getElementById('cppMin').value, 10);
+              const cppMax = parseInt(document.getElementById('cppMax').value, 10);
+              const cppStep = parseInt(document.getElementById('cppStep').value, 10);
+                  console.log("nodeMin",nodeMin)
+                  console.log("nodeMax",nodeMax)
+                  console.log("nodeStep",nodeStep)
+                  console.log("cppMin",cppMin)
+                  console.log("cppMax",cppMax)
+                  console.log("cppStep",cppStep)
 
             document.getElementById("progressContainer").style.display = "block";
 
@@ -68,8 +88,17 @@
                   cppStep: cppStep,
                 }),
               });
+             
 
               const data = await response.json();
+              if (response.status === 401) {
+                alert("You must be logged in to perform this action.");
+              } else if (response.status === 400) {
+                clearInterval(progressInterval); // Stop progress updates
+                isProgressUpdating = false; // Reset the flag
+                alert("Max character limit exceeded for Node.js or C++."); 
+                return;
+              }
 
               console.log("-------------Data-encrypt-performance-test----------");
               console.log(data);
