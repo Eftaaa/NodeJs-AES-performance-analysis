@@ -33,34 +33,30 @@
           <th>Name</th>
           <th>Price</th>
           <% if (authenticated) { %>
+            <th>Cart</th>
             <th>Action</th>
-            <% } %>
+          <% } %>
         </tr>
-        <% products.forEach(product=> { %>
+        <% products.forEach(product => { %>
           <tr>
-            <td>
-              <%= product.id %>
-            </td>
-            <td>
-              <%= product.nume %>
-            </td>
-            <td>
-              <%= product.pret.toFixed(2) %>
-            </td>
+            <td><%= product.id %></td>
+            <td><%= product.nume %></td>
+            <td><%= product.pret.toFixed(2) %></td>
             <% if (authenticated) { %>
+              <td><%= product.cart_quantity || 0 %></td> 
               <td>
-                <% if (product.stoc> 0) { %>
+                <% if (product.stoc > 0) { %>
                   <form method="POST" action="/adaugare_cos">
                     <input type="hidden" name="id" value="<%= product.id %>" />
                     <button type="submit">Adaugă în coș</button>
                   </form>
-                  <% } else { %>
-                    <span style="color: red">Produs indisponibil</span>
-                    <% } %>
+                <% } else { %>
+                  <span style="color: red">Produs indisponibil</span>
+                <% } %>
               </td>
-              <% } %>
+            <% } %>
           </tr>
-          <% }); %>
+        <% }); %>
       </table>
 </body>
 <script>

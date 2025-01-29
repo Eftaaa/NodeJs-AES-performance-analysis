@@ -394,48 +394,54 @@ app.post("/reset-session", (req, res) => {
   });
   res.clearCookie("connect.sid");
 });
-
 app.get("/", (req, res) => {
   const admin = req.cookies.admin === "true";
-  db = new sqlite3.Database("cumparaturi.db", sqlite3.OPEN_READWRITE, (err) => {
+  const username = req.cookies.username;
+  const authenticated = username ? true : false;
+
+  const db = new sqlite3.Database("cumparaturi.db", sqlite3.OPEN_READWRITE, (err) => {
     if (err) {
-      console.error(err);
-      res.render("index", { products: [], authenticated: false, admin: admin });
-      return;
+      console.error("Database connection error:", err);
+      return res.render("index", { products: [], authenticated, admin });
     }
 
     db.serialize(() => {
-      const username = req.cookies.username;
-      const authenticated = username ? true : false;
-
-      db.get(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='produse'",
-        (err, table) => {
-          if (err) throw err;
-
-          if (table) {
-            db.all("SELECT * FROM produse", (err, rows) => {
-              if (err) throw err;
-              res.render("demo_page", {
-                products: rows,
-                authenticated: authenticated,
-                admin: admin,
-                username: username,
-              });
-            });
-          } else {
-            res.render("demo_page", {
-              products: [],
-              authenticated: authenticated,
-              admin: admin,
-              username: username,
-            });
-          }
+      db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='produse'", (err, table) => {
+        if (err) {
+          console.error("Error checking for produse table:", err);
+          return res.status(500).send("Error checking for product table.");
         }
-      );
+
+        if (!table) {
+          return res.render("demo_page", { products: [], authenticated, admin, username });
+        }
+
+        let query = `SELECT p.id, p.nume, p.pret, p.stoc, COALESCE(SUM(ci.quantity), 0) AS cart_quantity
+                     FROM produse p
+                     LEFT JOIN cart_item ci ON p.id = ci.product_id
+                     LEFT JOIN cart c ON ci.cart_id = c.id AND c.customer_id = (SELECT id FROM customers WHERE name = ?)
+                     GROUP BY p.id`;
+
+        db.all(query, [username], (err, rows) => {
+          if (err) {
+            console.error("Error fetching products with cart quantities:", err);
+            return res.status(500).send("Error fetching products.");
+          }
+
+          console.log("Fetched products:", rows);
+          res.render("demo_page", {
+            products: rows,
+            authenticated,
+            admin,
+            username
+          });
+        });
+      });
     });
   });
 });
+
+
 app.get("/encryption-stats", (req, res) => {
   const username = req.cookies.username;
   if (!username) {
