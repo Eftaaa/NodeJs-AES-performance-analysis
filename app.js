@@ -525,13 +525,19 @@ app.post("/upload-encrypt", upload.single("file"), (req, res) => {
     const keyBase64 = keyBuffer.toString("base64");
 
     const aedBase64 = aed.toString("base64");
+
+    const ivHex = Buffer.from(iv).toString("hex");
+    const ivBase64 = Buffer.from(ivHex, "utf-8").toString("base64");
     const dataBase64 = Buffer.from(file).toString("base64");
+
+  
     // Second Encryption: Using C++ program via stdin/stdout
     const cppProcess = spawn("criptarebased.exe");
 
     cppProcess.stdin.write(dataBase64 + "\n");
     cppProcess.stdin.write(keyBase64 + "\n");
     cppProcess.stdin.write(aedBase64 + "\n");
+    cppProcess.stdin.write(ivBase64 + "\n");
     cppProcess.stdin.end();
 
     let stdoutData = "";
@@ -756,12 +762,17 @@ app.post("/encrypt", async (req, res) => {
 
   const keyBase64 = keyBuffer.toString("base64");
   const aedBase64 = aed.toString("base64");
+  const ivHex = Buffer.from(iv).toString("hex");
+  const ivBase64 = Buffer.from(ivHex, "utf-8").toString("base64");
+
+
 
   const cppProcess = spawn("criptarebased.exe");
 
   cppProcess.stdin.write(dataBase64 + "\n");
   cppProcess.stdin.write(keyBase64 + "\n");
   cppProcess.stdin.write(aedBase64 + "\n");
+  cppProcess.stdin.write(ivBase64 + "\n");
   cppProcess.stdin.end();
 
   let stdoutData = "";
@@ -894,11 +905,11 @@ app.get("/creare-bd", (req, res) => {
         );
 
         const drinks = [
-          { id: 1, nume: "Cola", pret: 2.5, stoc: 10 },
-          { id: 2, nume: "Limonadă", pret: 1.8, stoc: 15 },
-          { id: 3, nume: "Suc de Portocale", pret: 3.2, stoc: 8 },
-          { id: 4, nume: "Ceai Rece", pret: 2.0, stoc: 12 },
-          { id: 5, nume: "Cafea", pret: 2.7, stoc: 20 },
+          { id: 1, nume: "Cola", pret: 2.5, stoc: 50 },
+          { id: 2, nume: "Limonadă", pret: 1.8, stoc: 50 },
+          { id: 3, nume: "Suc de Portocale", pret: 3.2, stoc: 50 },
+          { id: 4, nume: "Ceai Rece", pret: 2.0, stoc: 50 },
+          { id: 5, nume: "Cafea", pret: 2.7, stoc: 50 },
         ];
 
         const insertQuery =
@@ -1171,7 +1182,7 @@ app.post("/encrypt-performance-test", (req, res) => {
     );
   }
 
-  if (nodeMax > 100000000 || cppMax > 0x1fffffe8) {
+  if (nodeMax > 100000000 || cppMax > 0x1fffffe) {
     return sendResponse(
       400,
       "Max character limit exceeded for Node.js or C++."
@@ -1244,12 +1255,19 @@ app.post("/encrypt-performance-test", (req, res) => {
               const runCppProcess = () => {
                 const cppProcess = spawn("criptarebased.exe");
                 activeCppProcesses++;
+
+                
+                const ivHex = Buffer.from(iv).toString("hex");
+                const ivBase64 = Buffer.from(ivHex, "utf-8").toString("base64");
                 cppProcess.stdin.write(
                   Buffer.from(content).toString("base64") + "\n"
                 );
                 const key2 = Buffer.from(req.session.aesKey, "utf-8");
+
+            
                 cppProcess.stdin.write(key2.toString("base64") + "\n");
                 cppProcess.stdin.write(aed.toString("base64") + "\n");
+                cppProcess.stdin.write(ivBase64 + "\n");
                 cppProcess.stdin.end();
                 let stdoutData = "";
                 cppProcess.stdout.on(
@@ -1341,19 +1359,19 @@ app.get("/inserare-bd", (req, res) => {
     console.log("Conexiunea la baza de date a fost realizată cu succes.");
 
     const cocktails = [
-      { id: 6, nume: "Mojito", pret: 15.0 },
-      { id: 7, nume: "Cosmopolitan", pret: 12.5 },
-      { id: 8, nume: "Piña Colada", pret: 10.99 },
-      { id: 9, nume: "Margarita", pret: 11.75 },
-      { id: 10, nume: "Daiquiri", pret: 13.25 },
+      { id: 6, nume: "Mojito", pret: 15.0, stoc: 50 },
+      { id: 7, nume: "Cosmopolitan", pret: 12.5, stoc: 50  },
+      { id: 8, nume: "Piña Colada", pret: 10.99, stoc: 50  },
+      { id: 9, nume: "Margarita", pret: 11.75, stoc: 50  },
+      { id: 10, nume: "Daiquiri", pret: 13.25, stoc: 50 },
     ];
 
     const insertQuery =
-      "REPLACE INTO produse (id, nume, pret) VALUES (?, ?, ?);";
+      "REPLACE INTO produse (id, nume, pret, stoc) VALUES (?, ?, ?, ?);";
     cocktails.forEach((cocktail) => {
       db.run(
         insertQuery,
-        [cocktail.id, cocktail.nume, cocktail.pret],
+        [cocktail.id, cocktail.nume, cocktail.pret, cocktail.stoc],
         (err) => {
           if (err) throw err;
           console.log(

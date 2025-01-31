@@ -96,6 +96,7 @@
               } else if (response.status === 400) {
                 clearInterval(progressInterval); // Stop progress updates
                 isProgressUpdating = false; // Reset the flag
+                document.getElementById("progressContainer").style.display = "none";
                 alert("Max character limit exceeded for Node.js or C++."); 
                 return;
               }
