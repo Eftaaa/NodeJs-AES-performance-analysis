@@ -42,6 +42,5 @@ Welcome to the Node.js Store Website! This dynamic application replicates a beve
 
 1. **Clone the Repository:**
 2. **Install Dependencies:** `npm install`
-3. **Database Setup:** `npm run db:setup`
-4. **Start the Server:** `nodemon app.js`
-5. **Explore:** Open `http://localhost:6789` in your browser.
+3. **Start the Server:** `nodemon app.js`
+4. **Explore:** Open `http://localhost:6789` in your browser.
