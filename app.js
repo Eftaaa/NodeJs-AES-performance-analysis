@@ -34,7 +34,7 @@ app.use(expressLayouts);
 const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
   modulusLength: 2048, // Recommended key length
   publicKeyEncoding: {
-    type: "spki", // Change from "pkcs1" to "spki"
+    type: "spki", 
     format: "pem", // PEM format
   },
   privateKeyEncoding: {
@@ -1154,6 +1154,8 @@ app.post("/encrypt-performance-test", (req, res) => {
       res.status(statusCode).json({ message });
     }
   };
+try {
+  
 
   if (!username) {
     return sendResponse(401, "You must be logged in to perform this action.");
@@ -1182,16 +1184,24 @@ app.post("/encrypt-performance-test", (req, res) => {
     );
   }
 
-  if (nodeMax > 100000000 || cppMax > 0x1fffffe) {
+  if (nodeMax > 100000000 || cppMax > 0x1fffffe0) {
     return sendResponse(
       400,
       "Max character limit exceeded for Node.js or C++."
     );
   }
-
+  const nodeRangeCount =
+    Math.floor((nodeMax - nodeMin) / nodeStep) + 1; 
+  const cppRangeCount =
+    Math.floor((cppMax - cppMin) / cppStep) + 1;    
   
+  if (nodeRangeCount + cppRangeCount > 100000) {
+    return sendResponse(
+      400,
+      "Too many total encryptions. Please reduce your ranges or increase step."
+    );
+  }
 
-  
 
   const key = Buffer.from(req.session.aesKey, "hex");
   const iv = Buffer.alloc(12, 0);
@@ -1349,6 +1359,15 @@ app.post("/encrypt-performance-test", (req, res) => {
       }
     );
   });
+} catch (error) {
+  console.error("Error in /encrypt-performance-test route:", err);
+
+    if (username && userProgress[username]) {
+      userProgress[username].running = false;
+    }
+
+    return res.status(500).json({ message: "An unexpected error occurred." });
+}
 });
 
 app.get("/inserare-bd", (req, res) => {

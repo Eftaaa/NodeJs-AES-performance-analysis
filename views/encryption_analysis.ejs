@@ -97,7 +97,23 @@
                 clearInterval(progressInterval); // Stop progress updates
                 isProgressUpdating = false; // Reset the flag
                 document.getElementById("progressContainer").style.display = "none";
-                alert("Max character limit exceeded for Node.js or C++."); 
+                const { encryptedData, authTag, aad, iv } = data;
+
+              // Decrypt the data
+              const decryptedData = await decryptData(
+                encryptedData,
+                aesKey,
+                iv,
+                aad,
+                authTag
+              );
+
+              // Convert the decrypted string into JSON
+              const parsedData = JSON.parse(decryptedData);
+              const realdata = JSON.parse(parsedData.data);
+            
+              alert(realdata.message); 
+
                 return;
               }
 
