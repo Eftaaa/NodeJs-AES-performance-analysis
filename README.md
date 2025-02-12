@@ -18,7 +18,6 @@ This project is a **fully encrypted online beverage store** built with **Node.js
 - 🛍 **Fully Functional Beverage Store:** Users can browse, add items to cart, and check out.  
 - 👤 **User Authentication:** Secure login.  
 - 📊 **Performance Benchmarking:** Compares the custom AES-GCM implementation with OpenSSL.  
-- 🔄 **Admin Management:** Inventory control with role-based access.  
 
 
 
@@ -29,7 +28,6 @@ Welcome to the Node.js Store Website! This dynamic application replicates a beve
 ### Features
 
 - **User-Friendly Interface:** Seamless browsing experience with a diverse selection of beverages.
-- **Login and Authentication:** Securely create accounts or sign in for personalized features.
 - **Beverage Questionnaire:** Tailor your experience with a user-friendly preferences survey.
 - **Spam Protection Middleware:** Secure login process with anti-spam measures.
 - **Resource Not Found Handling:** Maintain stability by handling non-existent resource access.
